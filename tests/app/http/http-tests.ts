@@ -223,7 +223,7 @@ export var test_getFile = function (done) {
     var result;
 
     // >> http-get-urlfile
-    http.getFile("https://raw.githubusercontent.com/NativeScript/NativeScript/master/apps/tests/logo.png").then(function (r) {
+    http.getFile("https://raw.githubusercontent.com/NativeScript/NativeScript/master/tests/app/logo.png").then(function (r) {
         //// Argument (r) is File!
         // >> (hide)
         result = r;
@@ -249,7 +249,7 @@ export var test_getContentAsFile = function (done) {
 
     // >> http-get-urlfile-content
     var filePath = fs.path.join(fs.knownFolders.documents().path, "test.png");
-    http.getFile("https://httpbin.org/image/png", filePath).then(function (r) {
+    http.getFile("https://httpbin.org/image/png?testQuery=query&anotherParam=param", filePath).then(function (r) {
         //// Argument (r) is File!
         // >> (hide)
         result = r;
@@ -273,7 +273,7 @@ export var test_getContentAsFile = function (done) {
 export var test_getFile_fail = function (done) {
     var result;
 
-    http.getImage({ url: "hgfttp://raw.githubusercontent.com/NativeScript/NativeScript/master/apps/tests/logo.png", method: "GET", timeout: 2000 }).catch(function (e) {
+    http.getImage({ url: "hgfttp://raw.githubusercontent.com/NativeScript/NativeScript/master/tests/app/logo.png", method: "GET", timeout: 2000 }).catch(function (e) {
         result = e;
         try {
             TKUnit.assert(result instanceof Error, "Result from getFile().catch() should be Error! Current type is " + typeof result);
@@ -457,7 +457,7 @@ export var test_request_responseContentToImageShouldReturnCorrectImage = functio
 export var test_request_responseContentToFileFromUrlShouldReturnCorrectFile = function (done) {
     var result;
 
-    http.request({ url: "https://raw.githubusercontent.com/NativeScript/NativeScript/master/apps/tests/logo.png", method: "GET" }).then(function (response) {
+    http.request({ url: "https://raw.githubusercontent.com/NativeScript/NativeScript/master/tests/app/logo.png", method: "GET" }).then(function (response) {
         result = response.content.toFile();
         try {
             TKUnit.assert(result instanceof fs.File, "Result from toFile() should be valid File object!");
@@ -474,7 +474,7 @@ export var test_request_responseContentToFileFromUrlShouldReturnCorrectFile = fu
 export var test_request_responseContentToFileFromContentShouldReturnCorrectFile = function (done) {
     var result;
 
-    http.request({ url: "https://httpbin.org/image/png", method: "GET" }).then(function (response) {
+    http.request({ url: "https://httpbin.org/image/png?queryString=param&another=anotherParam", method: "GET" }).then(function (response) {
         result = response.content.toFile();
         try {
             TKUnit.assert(result instanceof fs.File, "Result from toFile() should be valid File object!");

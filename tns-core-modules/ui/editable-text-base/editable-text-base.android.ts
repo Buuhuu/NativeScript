@@ -2,7 +2,7 @@
     EditableTextBase as EditableTextBaseCommon, keyboardTypeProperty,
     returnKeyTypeProperty, editableProperty,
     autocapitalizationTypeProperty, autocorrectProperty, hintProperty,
-    textProperty, placeholderColorProperty, Color, textTransformProperty
+    textProperty, placeholderColorProperty, Color, textTransformProperty, maxLengthProperty
 } from "./editable-text-base-common";
 
 import { ad } from "../../utils/utils";
@@ -48,7 +48,7 @@ function initializeEditTextListeners(): void {
 
         public afterTextChanged(editable: android.text.IEditable) {
             const owner = this.owner;
-            if (!owner || owner._inputTypeChange) {
+            if (!owner || owner._changeFromCode) {
                 return;
             }
 
@@ -77,6 +77,7 @@ function initializeEditTextListeners(): void {
                     clearTimeout(dismissKeyboardTimeoutId);
                     dismissKeyboardTimeoutId = undefined;
                 }
+                owner.notify({ eventName: EditableTextBase.focusEvent, object: owner });
             }
             else {
                 if (owner._dirtyTextAccumulator || owner._dirtyTextAccumulator === "") {
@@ -112,11 +113,13 @@ function initializeEditTextListeners(): void {
                     owner.dismissSoftInput();
                 }
                 owner._onReturnPress();
+                return true;
             }
 
             // If action is ACTION_NEXT then do not close keyboard
             if (actionId === android.view.inputmethod.EditorInfo.IME_ACTION_NEXT) {
                 owner._onReturnPress();
+                return true;
             }
 
             return false;
@@ -131,11 +134,11 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
     _dirtyTextAccumulator: string;
     /* tslint:enable */
 
-    nativeView: android.widget.EditText;
+    nativeViewProtected: android.widget.EditText;
     private _keyListenerCache: android.text.method.KeyListener;
     private _inputType: number;
 
-    public _inputTypeChange: boolean;
+    public _changeFromCode: boolean;
 
     public abstract _configureEditText(editText: android.widget.EditText): void;
 
@@ -148,7 +151,6 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
         const editText = new android.widget.EditText(this._context);
         this._configureEditText(editText);
 
-        this._inputType = editText.getInputType();
         const listeners = new EditTextListeners(this);
         editText.addTextChangedListener(listeners);
         editText.setOnFocusChangeListener(listeners);
@@ -159,38 +161,42 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
 
     public initNativeView(): void {
         super.initNativeView();
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         (<any>nativeView).listener.owner = this;
-        this._keyListenerCache = nativeView.getKeyListener();
+        this._inputType = nativeView.getInputType();
     }
 
-    public _disposeNativeView(force?: boolean) {
-        const nativeView = this.nativeView;
-        (<any>nativeView).listener.owner = null;
-        nativeView.setInputType(this._inputType);
+    public disposeNativeView(): void {
+        super.disposeNativeView();
+        (<any>this.nativeViewProtected).listener.owner = null;
         this._keyListenerCache = null;
     }
 
+    public resetNativeView(): void {
+        super.resetNativeView();
+        this.nativeViewProtected.setInputType(this._inputType);
+    }
+
     public dismissSoftInput() {
-        ad.dismissSoftInput(this.nativeView);
+        ad.dismissSoftInput(this.nativeViewProtected);
     }
 
     public focus(): boolean {
         const result = super.focus();
         if (result) {
-            ad.showSoftInput(this.nativeView);
+            ad.showSoftInput(this.nativeViewProtected);
         }
 
         return result;
     }
 
     public _setInputType(inputType: number): void {
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         try {
-            this._inputTypeChange = true;
+            this._changeFromCode = true;
             nativeView.setInputType(inputType);
         } finally {
-            this._inputTypeChange = false;
+            this._changeFromCode = false;
         }
 
         // setInputType will change the keyListener so we should cache it again
@@ -205,37 +211,22 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
         }
     }
 
-    [textProperty.getDefault](): string {
-        return this.nativeView.getText();
+    [textProperty.getDefault](): number {
+        return -1;
     }
-    [textProperty.setNative](value: string) {
-        const text = (value === null || value === undefined) ? '' : value.toString();
-        this.nativeView.setText(text, android.widget.TextView.BufferType.EDITABLE);
-    }
-
-    [keyboardTypeProperty.getDefault](): "datetime" | "phone" | "number" | "url" | "email" | string {
-        let inputType = this.nativeView.getInputType();
-        switch (inputType) {
-            case android.text.InputType.TYPE_CLASS_DATETIME | android.text.InputType.TYPE_DATETIME_VARIATION_NORMAL:
-                return "datetime";
-
-            case android.text.InputType.TYPE_CLASS_PHONE:
-                return "phone";
-
-            case android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_NORMAL | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL:
-                return "number";
-
-            case android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI:
-                return "url";
-
-            case android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS:
-                return "email";
-
-            default:
-                return inputType.toString();
+    [textProperty.setNative](value: string | number) {
+        try {
+            this._changeFromCode = true;
+            this._setNativeText(value === -1);
+        } finally {
+            this._changeFromCode = false;
         }
     }
-    [keyboardTypeProperty.setNative](value: "datetime" | "phone" | "number" | "url" | "email" | string) {
+
+    [keyboardTypeProperty.getDefault](): number {
+        return this.nativeViewProtected.getInputType();
+    }
+    [keyboardTypeProperty.setNative](value: "datetime" | "phone" | "number" | "url" | "email" | number) {
         let newInputType;
         switch (value) {
             case "datetime":
@@ -259,12 +250,7 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
                 break;
 
             default:
-                let inputType = +value;
-                if (!isNaN(inputType)) {
-                    newInputType = inputType;
-                } else {
-                    newInputType = android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_NORMAL;
-                }
+                newInputType = value;
                 break;
         }
 
@@ -272,7 +258,7 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
     }
 
     [returnKeyTypeProperty.getDefault](): "done" | "next" | "go" | "search" | "send" | string {
-        let ime = this.nativeView.getImeOptions();
+        let ime = this.nativeViewProtected.getImeOptions();
         switch (ime) {
             case android.view.inputmethod.EditorInfo.IME_ACTION_DONE:
                 return "done";
@@ -321,23 +307,23 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
                 break;
         }
 
-        this.nativeView.setImeOptions(newImeOptions);
+        this.nativeViewProtected.setImeOptions(newImeOptions);
     }
 
-    [editableProperty.getDefault](): boolean {
-        return true;
-    }
     [editableProperty.setNative](value: boolean) {
+        const nativeView = this.nativeViewProtected;
         if (value) {
-            this.nativeView.setKeyListener(this._keyListenerCache);
-        }
-        else {
-            this.nativeView.setKeyListener(null);
+            nativeView.setKeyListener(this._keyListenerCache);
+        } else {
+            if (!this._keyListenerCache) {
+                this._keyListenerCache = nativeView.getKeyListener();
+            }
+            nativeView.setKeyListener(null);
         }
     }
 
     [autocapitalizationTypeProperty.getDefault](): "none" | "words" | "sentences" | "allcharacters" | string {
-        let inputType = this.nativeView.getInputType();
+        let inputType = this.nativeViewProtected.getInputType();
         if ((inputType & android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS) === android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS) {
             return "words";
         } else if ((inputType & android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) === android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) {
@@ -349,7 +335,7 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
         }
     }
     [autocapitalizationTypeProperty.setNative](value: string) {
-        let inputType = this.nativeView.getInputType();
+        let inputType = this.nativeViewProtected.getInputType();
         inputType = inputType & ~28672; //28672 (0x00070000) 13,14,15bits (111 0000 0000 0000)
 
         switch (value) {
@@ -380,7 +366,7 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
     }
 
     [autocorrectProperty.getDefault](): boolean {
-        let autocorrect = this.nativeView.getInputType();
+        let autocorrect = this.nativeViewProtected.getInputType();
         if ((autocorrect & android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT) === android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT) {
             return true;
         }
@@ -388,7 +374,7 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
         return false;
     }
     [autocorrectProperty.setNative](value: boolean) {
-        let inputType = this.nativeView.getInputType();
+        let inputType = this.nativeViewProtected.getInputType();
         switch (value) {
             case true:
                 inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE;
@@ -409,24 +395,43 @@ export abstract class EditableTextBase extends EditableTextBaseCommon {
     }
 
     [hintProperty.getDefault](): string {
-        return this.nativeView.getHint();
+        return this.nativeViewProtected.getHint();
     }
     [hintProperty.setNative](value: string) {
-        this.nativeView.setHint(value + '');
+        const text = (value === null || value === undefined) ? null : value.toString();
+        this.nativeViewProtected.setHint(text);
     }
 
     [placeholderColorProperty.getDefault](): android.content.res.ColorStateList {
-        return this.nativeView.getHintTextColors();
+        return this.nativeViewProtected.getHintTextColors();
     }
     [placeholderColorProperty.setNative](value: Color | android.content.res.ColorStateList) {
-        if (value instanceof Color) {
-            this.nativeView.setHintTextColor(value.android);
-        } else {
-            this.nativeView.setHintTextColor(value);
-        }
+        const color = value instanceof Color ? value.android : value;
+        this.nativeViewProtected.setHintTextColor(<any>color);
     }
 
     [textTransformProperty.setNative](value: "default") {
         //
+    }
+
+    [maxLengthProperty.setNative](value: number) {
+        if (value === Number.POSITIVE_INFINITY) {
+            this.nativeViewProtected.setFilters([]);
+        } else {
+            const lengthFilter = new android.text.InputFilter.LengthFilter(value);
+            const filters = this.nativeViewProtected.getFilters();
+            const newFilters = [];
+
+            // retain existing filters
+            for (let i = 0; i < filters.length; i++) {
+                const filter = filters[i];
+                if (!(filter instanceof android.text.InputFilter.LengthFilter)) {
+                    newFilters.push(filter);
+                }
+            }
+
+            newFilters.push(lengthFilter);
+            this.nativeViewProtected.setFilters(newFilters);
+        }
     }
 }

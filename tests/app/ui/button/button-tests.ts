@@ -16,6 +16,10 @@ import * as bindable from "tns-core-modules/ui/core/bindable";
 import * as observable from "tns-core-modules/data/observable";
 // << button-require-others
 
+export function test_recycling() {
+    helper.nativeView_recycling_test(() => new buttonModule.Button());
+}
+
 export var testSetText = function () {
     helper.buildUIAndRunTest(_createButtonFunc(), _testSetText);
 }
@@ -224,6 +228,8 @@ var _testNativeBackgroundColorFromCss = function (views: Array<viewModule.View>)
     var page = <pagesModule.Page>views[1];
     page.css = "button { background-color: " + actualBackgroundColorHex + "; }";
 
+    helper.waitUntilLayoutReady(button);
+
     var actualResult = buttonTestsNative.getNativeBackgroundColor(button).hex;
     TKUnit.assert(actualResult === expectedNormalizedBackgroundColorHex, "Actual: " + actualResult + "; Expected: " + expectedNormalizedBackgroundColorHex);
 }
@@ -231,6 +237,8 @@ var _testNativeBackgroundColorFromCss = function (views: Array<viewModule.View>)
 var _testNativeBackgroundColorFromLocal = function (views: Array<viewModule.View>) {
     var button = <buttonModule.Button>views[0];
     button.style.backgroundColor = new colorModule.Color(actualBackgroundColorHex);
+
+    helper.waitUntilLayoutReady(button);
 
     var actualResult = buttonTestsNative.getNativeBackgroundColor(button).hex;
     TKUnit.assert(actualResult === expectedNormalizedBackgroundColorHex, "Actual: " + actualResult + "; Expected: " + expectedNormalizedBackgroundColorHex);
@@ -267,6 +275,8 @@ export var test_StateHighlighted_also_fires_pressedState = function () {
         var expectedNormalizedColor = "#FF0000";
         page.css = "button:pressed { background-color: " + expectedColor + "; }";
 
+        helper.waitUntilLayoutReady(view);
+
         view._goToVisualState('highlighted');
 
         var actualResult = buttonTestsNative.getNativeBackgroundColor(view);
@@ -282,6 +292,8 @@ export var test_StateHighlighted_also_fires_activeState = function () {
         var expectedNormalizedColor = "#FF0000";
         page.css = "button:active { background-color: " + expectedColor + "; }";
 
+        helper.waitUntilLayoutReady(view);
+
         view._goToVisualState('highlighted');
 
         var actualResult = buttonTestsNative.getNativeBackgroundColor(view);
@@ -296,6 +308,8 @@ export var test_applying_disabled_visual_State_when_button_is_disable = function
         var expectedColor = "#FFFF0000";
         var expectedNormalizedColor = "#FF0000";
         page.css = "button:disabled { background-color: " + expectedColor + "; }";
+
+        helper.waitUntilLayoutReady(view);
 
         view.isEnabled = false;
 

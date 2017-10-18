@@ -1,7 +1,8 @@
-﻿import { 
-    TextFieldBase, secureProperty, textProperty, hintProperty, colorProperty, placeholderColorProperty, 
+﻿import {
+    TextFieldBase, secureProperty, textProperty, hintProperty, colorProperty, placeholderColorProperty,
     Length, paddingTopProperty, paddingRightProperty, paddingBottomProperty, paddingLeftProperty, _updateCharactersInRangeReplacementString, Color, layout
 } from "./text-field-common";
+import { profile } from "../../profiling";
 
 export * from "./text-field-common";
 
@@ -32,6 +33,13 @@ class UITextFieldDelegateImpl extends NSObject implements UITextFieldDelegate {
         return true;
     }
 
+    public textFieldDidBeginEditing(textField: UITextField): void {
+        const owner = this._owner.get();
+        if (owner) {
+          owner.notify({ eventName: TextField.focusEvent, object: owner });
+        }
+    }
+
     public textFieldDidEndEditing(textField: UITextField) {
         const owner = this._owner.get();
         if (owner) {
@@ -47,7 +55,7 @@ class UITextFieldDelegateImpl extends NSObject implements UITextFieldDelegate {
         this.firstEdit = false;
         const owner = this._owner.get();
         if (owner) {
-            textProperty.nativeValueChange(owner,  '');
+            textProperty.nativeValueChange(owner, '');
         }
 
         return true;
@@ -67,6 +75,13 @@ class UITextFieldDelegateImpl extends NSObject implements UITextFieldDelegate {
     public textFieldShouldChangeCharactersInRangeReplacementString(textField: UITextField, range: NSRange, replacementString: string): boolean {
         const owner = this._owner.get();
         if (owner) {
+            const delta = replacementString.length - range.length;
+            if (delta > 0) {
+                if (textField.text.length + delta > owner.maxLength) {
+                    return false;
+                }
+            }
+
             if (owner.updateTextTrigger === "textChanged") {
                 if (textField.secureTextEntry && this.firstEdit) {
                     textProperty.nativeValueChange(owner, replacementString);
@@ -74,7 +89,7 @@ class UITextFieldDelegateImpl extends NSObject implements UITextFieldDelegate {
                 else {
                     if (range.location <= textField.text.length) {
                         const newText = NSString.stringWithString(textField.text).stringByReplacingCharactersInRangeWithString(range, replacementString);
-                        textProperty.nativeValueChange(owner,  newText);
+                        textProperty.nativeValueChange(owner, newText);
                     }
                 }
             }
@@ -128,16 +143,17 @@ class UITextFieldImpl extends UITextField {
 export class TextField extends TextFieldBase {
     private _ios: UITextField;
     private _delegate: UITextFieldDelegateImpl;
-    nativeView: UITextField;
+    nativeViewProtected: UITextField;
 
     constructor() {
         super();
         let weakRef = new WeakRef(this);
         this._ios = UITextFieldImpl.initWithOwner(weakRef);
         this._delegate = UITextFieldDelegateImpl.initWithOwner(weakRef);
-        this.nativeView = this._ios;
+        this.nativeViewProtected = this._ios;
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
         this._ios.delegate = this._delegate;
@@ -153,7 +169,7 @@ export class TextField extends TextFieldBase {
     }
 
     [hintProperty.getDefault](): string {
-        return this.nativeView.placeholder;
+        return this.nativeViewProtected.placeholder;
     }
     [hintProperty.setNative](value: string) {
         let stringValue;
@@ -162,38 +178,38 @@ export class TextField extends TextFieldBase {
         } else {
             stringValue = value + "";
         }
-        this.nativeView.placeholder = stringValue;
+        this.nativeViewProtected.placeholder = stringValue;
     }
 
     [secureProperty.getDefault](): boolean {
-        return this.nativeView.secureTextEntry;
+        return this.nativeViewProtected.secureTextEntry;
     }
     [secureProperty.setNative](value: boolean) {
-        this.nativeView.secureTextEntry = value;
+        this.nativeViewProtected.secureTextEntry = value;
     }
 
-    [colorProperty.getDefault](): UIColor {
-        // return this.nativeView.tintColor;
-        return this.nativeView.textColor;
+    [colorProperty.getDefault](): { textColor: UIColor, tintColor: UIColor } {
+        return {
+            textColor: this.nativeViewProtected.textColor,
+            tintColor: this.nativeViewProtected.tintColor
+        };
     }
-    [colorProperty.setNative](value: UIColor | Color) {
-        // NOTE: Do we need this code? We have placeholderColor.
-        // let nativeValue = this.nativeView;
-        // if (this.isShowingHint && value) {
-        //     nativeValue.textColor = value.colorWithAlphaComponent(0.22);
-        // } else {
-        //     nativeValue.textColor = value;
-        //     nativeValue.tintColor = value;
-        // }
-        let color = value instanceof Color ? value.ios : value;
-        this.nativeView.textColor = color;
+    [colorProperty.setNative](value: Color | { textColor: UIColor, tintColor: UIColor }) {
+        if (value instanceof Color) {
+            let color = value instanceof Color ? value.ios : value;
+            this.nativeViewProtected.textColor = color;
+            this.nativeViewProtected.tintColor = color;
+        } else {
+            this.nativeViewProtected.textColor = value.textColor;
+            this.nativeViewProtected.tintColor = value.tintColor;
+        }
     }
 
     [placeholderColorProperty.getDefault](): UIColor {
         return null;
     }
     [placeholderColorProperty.setNative](value: UIColor | Color) {
-        let nativeView = this.nativeView;
+        let nativeView = this.nativeViewProtected;
         let colorAttibutes = NSMutableDictionary.new<string, any>();
         colorAttibutes.setValueForKey(value instanceof Color ? value.ios : value, NSForegroundColorAttributeName);
         let stringValue;

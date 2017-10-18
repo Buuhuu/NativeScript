@@ -5,7 +5,7 @@ import {
     TextBaseCommon, formattedTextProperty, textAlignmentProperty, textDecorationProperty, fontSizeProperty,
     textProperty, textTransformProperty, letterSpacingProperty, colorProperty, fontInternalProperty,
     paddingLeftProperty, paddingTopProperty, paddingRightProperty, paddingBottomProperty, Length,
-    whiteSpaceProperty, FormattedString, layout, Span, Color, isBold
+    whiteSpaceProperty, lineHeightProperty, FormattedString, layout, Span, Color, isBold
 } from "./text-base-common";
 
 export * from "./text-base-common";
@@ -48,54 +48,99 @@ function initializeTextTransformation(): void {
 }
 
 export class TextBase extends TextBaseCommon {
-    nativeView: android.widget.TextView;
-    _defaultTransformationMethod: android.text.method.TransformationMethod;
+    nativeViewProtected: android.widget.TextView;
+    private _defaultTransformationMethod: android.text.method.TransformationMethod;
+    private _paintFlags: number;
+    private _minHeight: number;
+    private _maxHeight: number;
+    private _minLines: number;
+    private _maxLines: number;
 
     public initNativeView(): void {
-        this._defaultTransformationMethod = this.nativeView.getTransformationMethod();
+        initializeTextTransformation();
+        const nativeView = this.nativeViewProtected;
+        this._defaultTransformationMethod = nativeView.getTransformationMethod();
+        this._minHeight = nativeView.getMinHeight();
+        this._maxHeight = nativeView.getMaxHeight();
+        this._minLines = nativeView.getMinLines();
+        this._maxLines = nativeView.getMaxLines();
         super.initNativeView();
     }
 
     public resetNativeView(): void {
         super.resetNativeView();
+        const nativeView = this.nativeViewProtected;
         // We reset it here too because this could be changed by multiple properties - whiteSpace, secure, textTransform
-        this.nativeView.setTransformationMethod(this._defaultTransformationMethod);
+        nativeView.setSingleLine(this._isSingleLine);
+        nativeView.setTransformationMethod(this._defaultTransformationMethod);
         this._defaultTransformationMethod = null;
+
+        if (this._paintFlags !== undefined) {
+            nativeView.setPaintFlags(this._paintFlags);
+            this._paintFlags = undefined;
+        }
+
+        if (this._minLines !== -1) {
+            nativeView.setMinLines(this._minLines);
+        } else {
+            nativeView.setMinHeight(this._minHeight);
+        }
+
+        this._minHeight = this._minLines = undefined;
+
+        if (this._maxLines !== -1) {
+            nativeView.setMaxLines(this._maxLines);
+        } else {
+            nativeView.setMaxHeight(this._maxHeight);
+        }
+
+        this._maxHeight = this._maxLines = undefined;
     }
 
-    [textProperty.setNative](value: string) {
-        if (this.formattedText) {
+    [textProperty.getDefault](): number {
+        return -1;
+    }
+
+    [textProperty.setNative](value: string | number) {
+        const reset = value === -1;
+        if (!reset && this.formattedText) {
             return;
         }
 
-        this._setNativeText();
+        this._setNativeText(reset);
     }
 
     [formattedTextProperty.setNative](value: FormattedString) {
+        const nativeView = this.nativeViewProtected;
+        if (!value) {
+            if (nativeView instanceof android.widget.Button &&
+                nativeView.getTransformationMethod() instanceof TextTransformation) {
+                nativeView.setTransformationMethod(this._defaultTransformationMethod);
+            }
+        }
+
         // Don't change the transformation method if this is secure TextField or we'll lose the hiding characters.
         if ((<any>this).secure) {
             return;
         }
 
-        initializeTextTransformation();
-
         const spannableStringBuilder = createSpannableStringBuilder(value);
-        this.nativeView.setText(<any>spannableStringBuilder);
+        nativeView.setText(<any>spannableStringBuilder);
 
         textProperty.nativeValueChange(this, (value === null || value === undefined) ? '' : value.toString());
 
-        if (spannableStringBuilder && this.nativeView instanceof android.widget.Button &&
-            !(this.nativeView.getTransformationMethod() instanceof TextTransformation)) {
+        if (spannableStringBuilder && nativeView instanceof android.widget.Button &&
+            !(nativeView.getTransformationMethod() instanceof TextTransformation)) {
             // Replace Android Button's default transformation (in case the developer has not already specified a text-transform) method 
             // with our transformation method which can handle formatted text.
             // Otherwise, the default tranformation method of the Android Button will overwrite and ignore our spannableStringBuilder.
-            this.nativeView.setTransformationMethod(new TextTransformation(this));
+            nativeView.setTransformationMethod(new TextTransformation(this));
         }
     }
 
     [textTransformProperty.setNative](value: TextTransform) {
         if (value === "initial") {
-            this.nativeView.setTransformationMethod(this._defaultTransformationMethod);
+            this.nativeViewProtected.setTransformationMethod(this._defaultTransformationMethod);
             return;
         }
 
@@ -104,35 +149,34 @@ export class TextBase extends TextBaseCommon {
             return;
         }
 
-        initializeTextTransformation();
-        this.nativeView.setTransformationMethod(new TextTransformation(this));
+        this.nativeViewProtected.setTransformationMethod(new TextTransformation(this));
     }
 
     [textAlignmentProperty.getDefault](): TextAlignment {
         return "initial";
     }
     [textAlignmentProperty.setNative](value: TextAlignment) {
-        let verticalGravity = this.nativeView.getGravity() & android.view.Gravity.VERTICAL_GRAVITY_MASK;
+        let verticalGravity = this.nativeViewProtected.getGravity() & android.view.Gravity.VERTICAL_GRAVITY_MASK;
         switch (value) {
             case "initial":
             case "left":
-                this.nativeView.setGravity(android.view.Gravity.LEFT | verticalGravity);
+                this.nativeViewProtected.setGravity(android.view.Gravity.START | verticalGravity);
                 break;
 
             case "center":
-                this.nativeView.setGravity(android.view.Gravity.CENTER_HORIZONTAL | verticalGravity);
+                this.nativeViewProtected.setGravity(android.view.Gravity.CENTER_HORIZONTAL | verticalGravity);
                 break;
 
             case "right":
-                this.nativeView.setGravity(android.view.Gravity.RIGHT | verticalGravity);
+                this.nativeViewProtected.setGravity(android.view.Gravity.END | verticalGravity);
                 break;
         }
     }
 
-    // Overriden in TextField becasue setSingleLine(false) will remove methodTransformation.
+    // Overridden in TextField because setSingleLine(false) will remove methodTransformation.
     // and we don't want to allow TextField to be multiline
     [whiteSpaceProperty.setNative](value: WhiteSpace) {
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         switch (value) {
             case "initial":
             case "normal":
@@ -147,97 +191,112 @@ export class TextBase extends TextBaseCommon {
     }
 
     [colorProperty.getDefault](): android.content.res.ColorStateList {
-        return this.nativeView.getTextColors();
+        return this.nativeViewProtected.getTextColors();
     }
     [colorProperty.setNative](value: Color | android.content.res.ColorStateList) {
         if (!this.formattedText || !(value instanceof Color)) {
             if (value instanceof Color) {
-                this.nativeView.setTextColor(value.android);
+                this.nativeViewProtected.setTextColor(value.android);
             } else {
-                this.nativeView.setTextColor(value);
+                this.nativeViewProtected.setTextColor(value);
             }
         }
     }
 
     [fontSizeProperty.getDefault](): { nativeSize: number } {
-        return { nativeSize: this.nativeView.getTextSize() };
+        return { nativeSize: this.nativeViewProtected.getTextSize() };
     }
     [fontSizeProperty.setNative](value: number | { nativeSize: number }) {
         if (!this.formattedText || (typeof value !== "number")) {
             if (typeof value === "number") {
-                this.nativeView.setTextSize(value);
+                this.nativeViewProtected.setTextSize(value);
             } else {
-                this.nativeView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, value.nativeSize);
+                this.nativeViewProtected.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, value.nativeSize);
             }
         }
     }
 
+    [lineHeightProperty.getDefault](): number {
+        return this.nativeViewProtected.getLineSpacingExtra() / layout.getDisplayDensity();
+    }
+    [lineHeightProperty.setNative](value: number) {
+        this.nativeViewProtected.setLineSpacing(value * layout.getDisplayDensity(), 1);
+    }
+
     [fontInternalProperty.getDefault](): android.graphics.Typeface {
-        return this.nativeView.getTypeface();
+        return this.nativeViewProtected.getTypeface();
     }
     [fontInternalProperty.setNative](value: Font | android.graphics.Typeface) {
         if (!this.formattedText || !(value instanceof Font)) {
-            this.nativeView.setTypeface(value instanceof Font ? value.getAndroidTypeface() : value);
+            this.nativeViewProtected.setTypeface(value instanceof Font ? value.getAndroidTypeface() : value);
         }
+    }
+
+    [textDecorationProperty.getDefault](value: number) {
+        return this._paintFlags = this.nativeViewProtected.getPaintFlags();
     }
 
     [textDecorationProperty.setNative](value: number | TextDecoration) {
-        let flags: number;
         switch (value) {
             case "none":
-                flags = 0;
+                this.nativeViewProtected.setPaintFlags(0);
                 break;
             case "underline":
-                flags = android.graphics.Paint.UNDERLINE_TEXT_FLAG;
+                this.nativeViewProtected.setPaintFlags(android.graphics.Paint.UNDERLINE_TEXT_FLAG);
                 break;
             case "line-through":
-                flags = android.graphics.Paint.STRIKE_THRU_TEXT_FLAG;
+                this.nativeViewProtected.setPaintFlags(android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
                 break;
             case "underline line-through":
-                flags = android.graphics.Paint.UNDERLINE_TEXT_FLAG | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG;
+                this.nativeViewProtected.setPaintFlags(android.graphics.Paint.UNDERLINE_TEXT_FLAG | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
+                break;
+            default:
+                this.nativeViewProtected.setPaintFlags(value);
                 break;
         }
-
-        this.nativeView.setPaintFlags(flags);
-        this._setNativeText();
     }
 
     [letterSpacingProperty.getDefault](): number {
-        return org.nativescript.widgets.ViewHelper.getLetterspacing(this.nativeView);
+        return org.nativescript.widgets.ViewHelper.getLetterspacing(this.nativeViewProtected);
     }
     [letterSpacingProperty.setNative](value: number) {
-        org.nativescript.widgets.ViewHelper.setLetterspacing(this.nativeView, value);
+        org.nativescript.widgets.ViewHelper.setLetterspacing(this.nativeViewProtected, value);
     }
 
     [paddingTopProperty.getDefault](): Length {
         return { value: this._defaultPaddingTop, unit: "px" }
     }
     [paddingTopProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingTop(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderTopWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingTop(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderTopWidth, 0));
     }
 
     [paddingRightProperty.getDefault](): Length {
         return { value: this._defaultPaddingRight, unit: "px" }
     }
     [paddingRightProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingRight(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderRightWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingRight(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderRightWidth, 0));
     }
 
     [paddingBottomProperty.getDefault](): Length {
         return { value: this._defaultPaddingBottom, unit: "px" }
     }
     [paddingBottomProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingBottom(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderBottomWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingBottom(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderBottomWidth, 0));
     }
 
     [paddingLeftProperty.getDefault](): Length {
         return { value: this._defaultPaddingLeft, unit: "px" }
     }
     [paddingLeftProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingLeft(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderLeftWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingLeft(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderLeftWidth, 0));
     }
 
-    _setNativeText() {
+    _setNativeText(reset: boolean = false): void {
+        if (reset) {
+            this.nativeViewProtected.setText(null);
+            return;
+        }
+
         let transformedText: any;
         if (this.formattedText) {
             transformedText = createSpannableStringBuilder(this.formattedText);
@@ -247,7 +306,7 @@ export class TextBase extends TextBaseCommon {
             transformedText = getTransformedText(stringValue, this.textTransform);
         }
 
-        this.nativeView.setText(<any>transformedText);
+        this.nativeViewProtected.setText(<any>transformedText);
     }
 }
 

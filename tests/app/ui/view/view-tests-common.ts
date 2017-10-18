@@ -1,5 +1,5 @@
 ﻿import * as TKUnit from "../../TKUnit";
-import { View, eachDescendant, getViewById, InheritedProperty, CssProperty, Property, Style } from "tns-core-modules/ui/core/view";
+import { View, eachDescendant, getViewById, InheritedProperty, CssProperty, CssAnimationProperty, ShorthandProperty, Property, Style } from "tns-core-modules/ui/core/view";
 import { topmost } from "tns-core-modules/ui/frame";
 import { Page } from "tns-core-modules/ui/page";
 import { Button } from "tns-core-modules/ui/button";
@@ -14,7 +14,7 @@ import * as helper from "../../ui/helper";
 import * as observable from "tns-core-modules/data/observable";
 import * as bindable from "tns-core-modules/ui/core/bindable";
 import * as definition from "./view-tests";
-import { isIOS } from "tns-core-modules/platform";
+import { isIOS, isAndroid } from "tns-core-modules/platform";
 
 export function test_eachDescendant() {
     const test = function (views: Array<View>) {
@@ -253,18 +253,62 @@ export function test_InheritableStylePropertiesWhenUsedWithExtendedClass_AreInhe
 
 // TestView definition START
 const customCssProperty = new CssProperty<Style, string>({ name: "customCssProperty", cssName: "custom-css-property" });
+const customCssAnimationProperty = new CssAnimationProperty<Style, string>({ name: "customCssAnimationProperty", cssName: "custom-css-animation-property" });
 const customViewProperty = new Property<TestView, string>({ name: "custom" });
+
+const customCssAProperty = new CssProperty<Style, string>({
+    name: "customCssA",
+    cssName: "custom-css-a",
+    valueChanged(target, oldValue, newValue) {
+        if ((<any>target).customCssAPropertyChanged) {
+            (<any>target).customCssAPropertyChanged(oldValue, newValue);
+        }
+    }
+});
+customCssAProperty.register(Style);
+const customCssBProperty = new CssProperty<Style, string>({
+    name: "customCssB",
+    cssName: "custom-css-b",
+    valueChanged(target, oldValue, newValue) {
+        if ((<any>target).customCssBPropertyChanged) {
+            (<any>target).customCssBPropertyChanged(oldValue, newValue);
+        }
+    }
+});
+customCssBProperty.register(Style);
+const customShortHandProperty = new ShorthandProperty<Style, string>({
+    name: "customShortHand",
+    cssName: "custom-short-hand",
+    converter(value: string): [CssProperty<any, any>, any][] {
+        console.log("Convert: " + value);
+        const values = value.split(",");
+        return [
+            [customCssAProperty, values[0]],
+            [customCssBProperty, values[1]]
+        ];
+    },
+    getter(this: Style): string {
+        return `${(<any>this).customCssA},${(<any>this).customCssB}`;
+    }
+});
+customShortHandProperty.register(Style);
 
 class TestView extends Layout {
     public inheritanceTest: number;
     public booleanInheritanceTest: boolean;
     public dummy: number;
 
+    public viewPropGetDefaultCounter: number = 0;
+    public viewPropCounter: number = 0;
+    public viewPropNativeValue: string;
+
+    public cssPropGetDefaultCounter: number = 0;
     public cssPropCounter: number = 0;
     public cssPropNativeValue: string;
 
-    public viewPropCounter: number = 0;
-    public viewPropNativeValue: string;
+    public cssAnimPropGetDefaultCounter: number = 0;
+    public cssAnimPropCounter: number = 0;
+    public cssAnimPropNativeValue: string;
 
     public custom: string;
     get customCssProperty(): string {
@@ -274,16 +318,44 @@ class TestView extends Layout {
         this.style["customCssProperty"] = value;
     }
 
+    get customCssAnimationProperty(): string {
+        return this.style["customCssAnimationProperty"];
+    }
+    set customCssAnimationProperty(value: string) {
+        this.style["customCssAnimationProperty"] = value;
+    }
+
+    get customCssA(): string {
+        return (<any>this.style).customCssA;
+    }
+    set customCssA(value: string) {
+        (<any>this.style).customCssA = value;
+    }
+
+    get customCssB(): string {
+        return (<any>this.style).customCssB;
+    }
+    set customCssB(value: string) {
+        (<any>this.style).customCssB = value;
+    }
+
+    get customShortHand(): string {
+        return (<any>this.style).customShortHand;
+    }
+    set customShortHand(value: string) {
+        console.log("Setting style's customShortHand: " + value);
+        (<any>this.style).customShortHand = value;
+    }
+
     private _nativeView;
     constructor(public name: string) {
         super();
-        this._nativeView = this.nativeView;
-        this.nativeView = undefined;
+        this._nativeView = this.nativeViewProtected;
+        this.nativeViewProtected = undefined;
     }
 
     public createNativeView() {
         if (isIOS) {
-            this.nativeView = this._nativeView;
             return this._nativeView;
         }
 
@@ -298,7 +370,17 @@ class TestView extends Layout {
         this.setMeasuredDimension(100, 100);
     }
 
+    [customViewProperty.getDefault](): string {
+        this.viewPropGetDefaultCounter++;
+        return "customViewPropertyDefaultValue";
+    }
+    [customViewProperty.setNative](value: string) {
+        this.viewPropCounter++;
+        this.viewPropNativeValue = value;
+    }
+
     [customCssProperty.getDefault](): string {
+        this.cssPropGetDefaultCounter++;
         return "customCssPropertyDefaultValue";
     }
     [customCssProperty.setNative](value: string) {
@@ -306,16 +388,18 @@ class TestView extends Layout {
         this.cssPropNativeValue = value;
     }
 
-    [customViewProperty.getDefault](): string {
-        return "customViewPropertyDefaultValue";
+    [customCssAnimationProperty.getDefault](): string {
+        this.cssAnimPropGetDefaultCounter++;
+        return "customCssAnimationPropertyDefaultValue";
     }
-    [customViewProperty.setNative](value: string) {
-        this.viewPropCounter++;
-        this.viewPropNativeValue = value;
+    [customCssAnimationProperty.setNative](value: string) {
+        this.cssAnimPropCounter++;
+        this.cssAnimPropNativeValue = value;
     }
 }
 
 customCssProperty.register(Style);
+customCssAnimationProperty.register(Style);
 customViewProperty.register(TestView);
 
 const inheritanceTestDefaultValue = 42;
@@ -337,20 +421,61 @@ export function test_NativeSetter_not_called_when_property_is_not_set() {
     helper.buildUIAndRunTest(testView, () => {
         TKUnit.assertEqual(testView.viewPropCounter, 0, "Native setter should not be called if value is not set.");
         TKUnit.assertEqual(testView.cssPropCounter, 0, "Native setter should not be called if value is not set.");
+        TKUnit.assertEqual(testView.cssAnimPropCounter, 0, "Native setter should not be called if value is not set.");
+    });
+};
+
+export function test_GetDefault_not_called_when_property_is_not_set() {
+    const testView = new TestView("view");
+
+    helper.buildUIAndRunTest(testView, () => {
+        TKUnit.assertEqual(testView.viewPropGetDefaultCounter, 0, "Get default should not be called if value is not set.");
+        TKUnit.assertEqual(testView.cssPropGetDefaultCounter, 0, "Get default should not be called if value is not set.");
+        TKUnit.assertEqual(testView.cssAnimPropGetDefaultCounter, 0, "Get default should not be called if value is not set.");
     });
 };
 
 export function test_NativeSetter_called_only_once_with_localValue() {
     const testView = new TestView("view");
     testView.customCssProperty = "testCssValue";
+    testView.customCssAnimationProperty = "testCssAnimValue";
     testView.custom = "testViewValue";
 
     helper.buildUIAndRunTest(testView, () => {
         TKUnit.assertEqual(testView.cssPropNativeValue, "testCssValue", "Native value");
+        TKUnit.assertEqual(testView.cssAnimPropNativeValue, "testCssAnimValue", "Native value");
         TKUnit.assertEqual(testView.viewPropNativeValue, "testViewValue", "Native value");
 
         TKUnit.assertEqual(testView.cssPropCounter, 1, "NativeSetter count called once");
+        TKUnit.assertEqual(testView.cssAnimPropCounter, 1, "NativeSetter count called once");
         TKUnit.assertEqual(testView.viewPropCounter, 1, "NativeSetter count called once");
+
+        TKUnit.assertEqual(testView.cssPropGetDefaultCounter, 1, "GetDefault count called once");
+        TKUnit.assertEqual(testView.cssAnimPropGetDefaultCounter, 1, "GetDefault count called once");
+        TKUnit.assertEqual(testView.viewPropGetDefaultCounter, 1, "GetDefault count called once");
+    });
+};
+
+export function test_NativeSetter_called_only_once_with_localValue_after_added_to_visual_tree() {
+    const testView = new TestView("view");
+
+    helper.buildUIAndRunTest(testView, () => {
+
+        testView.customCssProperty = "testCssValue";
+        testView.customCssAnimationProperty = "testCssAnimValue";
+        testView.custom = "testViewValue";
+
+        TKUnit.assertEqual(testView.cssPropNativeValue, "testCssValue", "Native value");
+        TKUnit.assertEqual(testView.cssAnimPropNativeValue, "testCssAnimValue", "Native value");
+        TKUnit.assertEqual(testView.viewPropNativeValue, "testViewValue", "Native value");
+
+        TKUnit.assertEqual(testView.cssPropCounter, 1, "NativeSetter count called once");
+        TKUnit.assertEqual(testView.cssAnimPropCounter, 1, "NativeSetter count called once");
+        TKUnit.assertEqual(testView.viewPropCounter, 1, "NativeSetter count called once");
+
+        TKUnit.assertEqual(testView.cssPropGetDefaultCounter, 1, "GetDefault count called once");
+        TKUnit.assertEqual(testView.cssAnimPropGetDefaultCounter, 1, "GetDefault count called once");
+        TKUnit.assertEqual(testView.viewPropGetDefaultCounter, 1, "GetDefault count called once");
     });
 };
 
@@ -361,13 +486,16 @@ export function test_NativeSetter_called_only_once_with_cssValue() {
     #myID { 
         custom: testViewValue; 
         custom-css-property: testCssValue; 
+        custom-css-animation-property: testCssAnimValue; 
     }`;
 
     helper.buildUIAndRunTest(testView, () => {
         TKUnit.assertEqual(testView.cssPropCounter, 1, "CssNativeSetter count called once");
         TKUnit.assertEqual(testView.viewPropCounter, 1, "ViewNativeSetter count called once");
+        TKUnit.assertEqual(testView.cssAnimPropCounter, 1, "CssAnimationNativeSetter count called once");
 
         TKUnit.assertEqual(testView.cssPropNativeValue, "testCssValue", "Native value");
+        TKUnit.assertEqual(testView.cssAnimPropNativeValue, "testCssAnimValue", "Native value");
         TKUnit.assertEqual(testView.viewPropNativeValue, "testViewValue", "Native value");
     }, pageCSS);
 };
@@ -376,19 +504,23 @@ export function test_NativeSetter_called_only_once_with_cssValue_and_localValue(
     const testView = new TestView("view");
     testView.id = "myID";
     testView.customCssProperty = "testCssValueLocal";
+    testView.customCssAnimationProperty = "testCssAnimationValueLocal";
     testView.custom = "testViewValueLocal";
     const pageCSS = `
     #myID { 
         custom-css-property: testCssValueCSS; 
         custom: testViewValueCSS; 
+        custom-css-animation-property: testCssAnimValueCSS;         
     }`;
 
     helper.buildUIAndRunTest(testView, () => {
         TKUnit.assertEqual(testView.cssPropCounter, 1, "CssNativeSetter count called once");
         TKUnit.assertEqual(testView.viewPropCounter, 1, "ViewNativeSetter count called once");
+        TKUnit.assertEqual(testView.cssAnimPropCounter, 1, "CssAnimNativeSetter count called once");
 
         // CSS property set form css has CSS value source, which is weaker than local value
         TKUnit.assertEqual(testView.cssPropNativeValue, "testCssValueLocal", "Native value");
+        TKUnit.assertEqual(testView.cssAnimPropNativeValue, "testCssAnimationValueLocal", "Native value");
         // View property set from CSS sets local value
         TKUnit.assertEqual(testView.viewPropNativeValue, "testViewValueCSS", "Native value");
     }, pageCSS);
@@ -401,11 +533,16 @@ export function test_NativeSetter_called_only_once_with_multiple_sets() {
     testView.customCssProperty = "testCssValue1";
     testView.customCssProperty = "testCssValue2";
 
+    testView.customCssAnimationProperty = "testCssAnimValue1";
+    testView.customCssAnimationProperty = "testCssAnimValue2";
+
     helper.buildUIAndRunTest(testView, () => {
         TKUnit.assertEqual(testView.cssPropCounter, 1, "NativeSetter count called once");
+        TKUnit.assertEqual(testView.cssAnimPropCounter, 1, "NativeSetter count called once");
         TKUnit.assertEqual(testView.viewPropCounter, 1, "NativeSetter count called once");
 
         TKUnit.assertEqual(testView.cssPropNativeValue, "testCssValue2", "Native value");
+        TKUnit.assertEqual(testView.cssAnimPropNativeValue, "testCssAnimValue2", "Native value");
         TKUnit.assertEqual(testView.viewPropNativeValue, "testViewValue2", "Native value");
     });
 };
@@ -441,7 +578,7 @@ export function test_NativeSetter_called_when_add_and_remove() {
 export function test_NativeSetter_called_when_add_and_remove_and_recycled() {
     const firstView = new TestView("firstView");
     const secondView = new TestView("secondView");
-    secondView.recycleNativeView = !isIOS;
+    secondView.recycleNativeView = isAndroid ? "always" : "never";
     secondView.customCssProperty = "testCssValue";
     secondView.custom = "testViewValue";
 
@@ -464,8 +601,12 @@ export function test_NativeSetter_called_when_add_and_remove_and_recycled() {
         firstView.removeChild(secondView);
 
         // we don't recycle nativeViews on iOS yet so reset is not called.
-        TKUnit.assertEqual(secondView.cssPropCounter, isIOS ? 2 : 3, "7");
-        TKUnit.assertEqual(secondView.viewPropCounter, isIOS ? 2 : 3, "8");
+        // Recycling disabled for android too
+        // TKUnit.assertEqual(secondView.cssPropCounter, isIOS ? 2 : 3, "7");
+        // TKUnit.assertEqual(secondView.viewPropCounter, isIOS ? 2 : 3, "8");
+
+        TKUnit.assertEqual(secondView.cssPropCounter, 2, "7");
+        TKUnit.assertEqual(secondView.viewPropCounter,2, "8");
     });
 };
 
@@ -802,39 +943,14 @@ export function testSetInlineStyle() {
 
     helper.buildUIAndRunTest(lbl, function (views: Array<View>) {
         TKUnit.assertEqual(lbl.color.hex, expectedColor);
-        TKUnit.assertEqual(lbl.backgroundColor.hex, expectedBackgroundColor);
-    });
-};
-
-export function testBorderWidth() {
-    helper.buildUIAndRunTest(_createLabelWithBorder(), function (views: Array<View>) {
-        const lbl = views[0];
-        const expectedValue = Math.round(<number>lbl.borderWidth * utils.layout.getDisplayDensity());
-        const actualValue = definition.getUniformNativeBorderWidth(lbl);
-        TKUnit.assertAreClose(actualValue, expectedValue, 0.01, "borderWidth");
-    });
-};
-
-export function testCornerRadius() {
-    helper.buildUIAndRunTest(_createLabelWithBorder(), function (views: Array<View>) {
-        const lbl = views[0];
-        TKUnit.waitUntilReady(() => lbl.isLayoutValid);
-        const expectedValue = Math.round(<number>lbl.borderRadius * utils.layout.getDisplayDensity());
-        const actualValue = definition.getUniformNativeCornerRadius(lbl);
-        TKUnit.assertAreClose(actualValue, expectedValue, 0.01, "borderRadius");
-    });
-};
-
-export function testBorderColor() {
-    helper.buildUIAndRunTest(_createLabelWithBorder(), function (views: Array<View>) {
-        const lbl = views[0];
-        TKUnit.assertEqual(definition.checkUniformNativeBorderColor(lbl), true, "BorderColor not applied correctly!");
+        TKUnit.assertEqual((<Color>lbl.backgroundColor).hex, expectedBackgroundColor);
     });
 };
 
 export function testBackgroundColor() {
     helper.buildUIAndRunTest(_createLabelWithBorder(), function (views: Array<View>) {
         const lbl = views[0];
+        helper.waitUntilLayoutReady(lbl);
         TKUnit.assertEqual(definition.checkNativeBackgroundColor(lbl), true, "BackgroundColor not applied correctly!");
     });
 };
@@ -847,6 +963,17 @@ export function testBackgroundImage() {
         page.css = ".myClass { background-image: url('~/logo.png') }";
         TKUnit.assertEqual(definition.checkNativeBackgroundImage(lbl), true, "Style background-image not loaded correctly.");
     });
+};
+
+export function testBackgroundShorthand_With_EmptyBorder() {
+    // Related to issue https://github.com/NativeScript/NativeScript/issues/4415
+    const lbl = new Label();
+    lbl.className = "test";
+    const css = ".test { border-width: 0; background: transparent; }";
+
+    helper.buildUIAndRunTest(lbl, (views: Array<View>) => {
+        helper.waitUntilLayoutReady(lbl);
+    }, css);
 };
 
 export function test_automation_text_default_value() {
@@ -891,7 +1018,7 @@ export function test_getLocationRelativeToOtherView() {
     a1.addChild(a2);
 
     helper.buildUIAndRunTest(a1, function (views: Array<View>) {
-        TKUnit.waitUntilReady(() => a1.isLayoutValid);
+        helper.waitUntilLayoutReady(a1);
 
         const labelInA2 = label.getLocationRelativeTo(a2);
         const labelInA1 = label.getLocationRelativeTo(a1);
@@ -913,7 +1040,7 @@ export function test_getActualSize() {
     label.width = 100;
     label.height = 200;
     helper.buildUIAndRunTest(label, function (views: Array<View>) {
-        TKUnit.waitUntilReady(() => label.isLayoutValid);
+        helper.waitUntilLayoutReady(label);
         const actualSize = label.getActualSize();
         TKUnit.assertAreClose(actualSize.width, 100, delta, "actualSize.width");
         TKUnit.assertAreClose(actualSize.height, 200, delta, "actualSize.height");
@@ -921,9 +1048,40 @@ export function test_getActualSize() {
 };
 
 export function test_background_image_doesnt_throw() {
-   var btn = new Button();
-   btn.style.backgroundImage = 'https://www.bodybuilding.com/images/2016/june/8-benefits-to-working-out-in-the-morning-header-v2-830x467.jpg';
-   helper.buildUIAndRunTest(btn, function (views: Array<View>) {
-        TKUnit.waitUntilReady(() => btn.isLayoutValid);
+    var btn = new Button();
+    // There is no need to wait until image is downloaded.
+    // It was throwing an exception when starting the download...
+    btn.style.backgroundImage = 'https://www.bodybuilding.com/images/2016/june/8-benefits-to-working-out-in-the-morning-header-v2-830x467.jpg';
+    helper.buildUIAndRunTest(btn, function (views: Array<View>) {
+        helper.waitUntilLayoutReady(btn);
     });
+}
+
+export function test_shorthand_property_sets_composite_properties() {
+    var view = new TestView("view1");
+    view.customShortHand = "left,right";
+    TKUnit.assertEqual(view.customCssA, "left", "Expected customCssAProperty to be 'left'.");
+    TKUnit.assertEqual(view.customCssB, "right", "Expected customCssAProperty to be 'right'.");
+}
+
+export function test_shorthand_property_is_set_by_composite_properties() {
+    var view = new TestView("view1");
+    view.customCssA = "left";
+    view.customCssB = "right";
+    TKUnit.assertEqual(view.customShortHand, "left,right");
+}
+
+export function test_shorthand_property_doesnt_cache() {
+    var view = new TestView("view1");
+    view.customShortHand = "left,right";
+    TKUnit.assertEqual(view.customCssA, "left", "Expected customCssA to be 'left' the first time.");
+    TKUnit.assertEqual(view.customCssB, "right", "Expected customCssA to be 'right' the second time.");
+    view.customCssA = "top";
+    view.customCssB = "bottom";
+    TKUnit.assertEqual(view.customShortHand, "top,bottom", "Expected customShortHand to be 'top,bottom' calculated from the composite properties.");
+    // This used to fail in https://github.com/NativeScript/NativeScript/issues/4450 the customShortHand would cache "left,right" when initially set,
+    // And won't run internal logic as the new value is "same" as the previous value, not taking into account that meanwhile the composite properties were set.
+    view.customShortHand = "left,right";
+    TKUnit.assertEqual(view.customCssA, "left", "Expected customCssA to be 'left' the second time.");
+    TKUnit.assertEqual(view.customCssB, "right", "Expected customCssA to be 'right' the second time.");
 }

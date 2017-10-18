@@ -2,9 +2,6 @@
 import { View as ViewDefinition, Point, Size, Color, dip } from ".";
 import { HorizontalAlignment, VerticalAlignment, Visibility, Length, PercentLength } from "../../styling/style-properties";
 
-// Types.
-import { Source } from "../../../utils/debug";
-
 import {
     ViewBase, Property, booleanConverter, EventData, layout,
     getEventOrGestureName, traceEnabled, traceWrite, traceCategories
@@ -50,14 +47,16 @@ export abstract class ViewCommon extends ViewBase implements ViewDefinition {
     private _measuredWidth: number;
     private _measuredHeight: number;
 
+    private _isLayoutValid: boolean;
+    private _cssType: string;
+
+    private _localAnimations: Set<am.Animation>;
+
     _currentWidthMeasureSpec: number;
     _currentHeightMeasureSpec: number;
 
     _setMinWidthNative: (value: Length) => void;
     _setMinHeightNative: (value: Length) => void;
-
-    private _isLayoutValid: boolean;
-    private _cssType: string;
 
     public _gestureObservers = {};
 
@@ -714,23 +713,35 @@ export abstract class ViewCommon extends ViewBase implements ViewDefinition {
 
     public createAnimation(animation: any): am.Animation {
         ensureAnimationModule();
+        if (!this._localAnimations) {
+            this._localAnimations = new Set();
+        }
         animation.target = this;
-        return new animationModule.Animation([animation]);
+        const anim = new animationModule.Animation([animation]);
+        this._localAnimations.add(anim);
+        return anim;
     }
 
-    public toString(): string {
-        let str = this.typeName;
-        if (this.id) {
-            str += `<${this.id}>`;
-        } else {
-            str += `(${this._domId})`;
-        }
-        let source = Source.get(this);
-        if (source) {
-            str += `@${source};`;
+    public _removeAnimation(animation: am.Animation): boolean {
+        const localAnimations = this._localAnimations;
+        if (localAnimations && localAnimations.has(animation)) {
+            localAnimations.delete(animation);
+            if (animation.isPlaying) {
+                animation.cancel();
+            }
+
+            return true;
         }
 
-        return str;
+        return false;
+    }
+
+    public resetNativeView(): void {
+        if (this._localAnimations) {
+            this._localAnimations.forEach(a => this._removeAnimation(a));
+        }
+
+        super.resetNativeView();
     }
 
     public _setNativeViewFrame(nativeView: any, frame: any) {
@@ -738,7 +749,7 @@ export abstract class ViewCommon extends ViewBase implements ViewDefinition {
     }
 
     public _getValue(): never {
-        throw new Error("The View._setValue is obsolete. There is a new property system.");
+        throw new Error("The View._getValue is obsolete. There is a new property system.");
     }
 
     public _setValue(): never {
@@ -768,6 +779,10 @@ export abstract class ViewCommon extends ViewBase implements ViewDefinition {
     }
 
     public _setNativeClipToBounds() {
+        //
+    }
+
+    public _redrawNativeBackground(value: any): void {
         //
     }
 }

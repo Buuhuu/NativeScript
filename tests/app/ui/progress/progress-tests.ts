@@ -18,6 +18,10 @@ export function test_default_TNS_values() {
     TKUnit.assertEqual(progress.maxValue, 100, "Default progress.maxValue");
 }
 
+export function test_recycling() {
+    helper.nativeView_recycling_test(() => new progressModule.Progress());
+}
+
 export function test_default_native_values() {
     var progress = new progressModule.Progress();
 
@@ -70,7 +74,7 @@ if (platform.device.os === platform.platformNames.ios) {
         progress.backgroundColor = new color.Color("red");
 
         function testAction(views: Array<viewModule.View>) {
-            TKUnit.assertEqual(progress.backgroundColor.ios.CGColor, progress.ios.trackTintColor.CGColor, "progress.color");
+            TKUnit.assertEqual((<color.Color>progress.backgroundColor).ios.CGColor, progress.ios.trackTintColor.CGColor, "progress.color");
         };
 
         helper.buildUIAndRunTest(progress, testAction);

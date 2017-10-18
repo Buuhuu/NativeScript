@@ -104,7 +104,7 @@ export class Page extends ContentView {
     public actionBarHidden: boolean;
 
     /**
-     * Used to control if swipe back navigation in iOS is enabled. This property is iOS sepecific. Default value: true
+     * Used to control if swipe back navigation in iOS is enabled. This property is iOS specific. Default value: true
      */
     public enableSwipeBackNavigation: boolean;
 
@@ -254,15 +254,6 @@ export class Page extends ContentView {
      * @param isBackNavigation - True if the Page is being navigated from using the Frame.goBack() method, false otherwise.
      */
     public onNavigatedFrom(isBackNavigation: boolean): void;
-
-    /**
-     * @private
-     */
-    _refreshCss(): void;
-    /**
-     * @private
-     */ 
-    _getStyleScope(): styleScope.StyleScope;
     //@endprivate
 }
 
@@ -278,7 +269,7 @@ export const actionBarHiddenProperty: Property<Page, boolean>;
 
 /**
  * Dependency property used to control if swipe back navigation in iOS is enabled.
- * This property is iOS sepecific. Default value: true
+ * This property is iOS specific. Default value: true
  */
 export const enableSwipeBackNavigationProperty: Property<Page, boolean>;
 

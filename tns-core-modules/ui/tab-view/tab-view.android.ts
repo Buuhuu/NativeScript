@@ -5,7 +5,7 @@ import {
     tabTextColorProperty, tabBackgroundColorProperty, selectedTabTextColorProperty,
     androidSelectedTabHighlightColorProperty, androidOffscreenTabLimitProperty,
     fontSizeProperty, fontInternalProperty, View, layout,
-    traceCategory, traceEnabled, traceWrite, initNativeView, Color
+    traceCategory, traceEnabled, traceWrite, Color
 } from "./tab-view-common"
 import { textTransformProperty, TextTransform, getTransformedText } from "../text-base";
 import { fromFileOrResource } from "../../image-source";
@@ -19,11 +19,11 @@ const PRIMARY_COLOR = "colorPrimary";
 const DEFAULT_ELEVATION = 4;
 
 interface PagerAdapter {
-    new (owner: TabView, items: Array<TabViewItem>): android.support.v4.view.PagerAdapter;
+    new(owner: TabView, items: Array<TabViewItem>): android.support.v4.view.PagerAdapter;
 }
 
 interface PageChangedListener {
-    new (owner: TabView): android.support.v4.view.ViewPager.SimpleOnPageChangeListener;
+    new(owner: TabView): android.support.v4.view.ViewPager.SimpleOnPageChangeListener;
 }
 
 let PagerAdapter: PagerAdapter;
@@ -66,34 +66,28 @@ function initializeNativeClasses() {
                 if (traceEnabled()) {
                     traceWrite("TabView.PagerAdapter.instantiateItem; restoreHierarchyState: " + item.view, traceCategory);
                 }
-                item.view.nativeView.restoreHierarchyState(this[VIEWS_STATES]);
+                item.view.nativeViewProtected.restoreHierarchyState(this[VIEWS_STATES]);
             }
 
-            if (item.view.nativeView) {
-                container.addView(item.view.nativeView);
+            if (item.view.nativeViewProtected) {
+                container.addView(item.view.nativeViewProtected);
             }
-            return item.view.nativeView;
+            return item.view.nativeViewProtected;
         }
 
-        destroyItem(container: android.view.ViewGroup, index: number, _object: any) {
+        destroyItem(container: android.view.ViewGroup, index: number, nativeView: android.view.View) {
             if (traceEnabled()) {
-                traceWrite("TabView.PagerAdapter.destroyItem; container: " + container + "; index: " + index + "; _object: " + _object, traceCategory);
+                traceWrite("TabView.PagerAdapter.destroyItem; container: " + container + "; index: " + index + "; nativeView: " + nativeView, traceCategory);
             }
-            let item = this.items[index];
-            let nativeView = item.view.nativeView;
 
-            if (!nativeView || !_object) {
+            if (!nativeView) {
                 return;
-            }
-
-            if (nativeView.toString() !== _object.toString()) {
-                throw new Error("Expected " + nativeView.toString() + " to equal " + _object.toString());
             }
 
             container.removeView(nativeView);
 
             // Note: this.owner._removeView will clear item.view.nativeView.
-            // So call this after the native instance is removed form the container. 
+            // So call this after the native instance is removed form the container.
             // if (item.view.parent === this.owner) {
             //     this.owner._removeView(item.view);
             // }
@@ -118,7 +112,7 @@ function initializeNativeClasses() {
             }
             let viewStates = this[VIEWS_STATES];
             let childCallback = function (view: View): boolean {
-                let nativeView: android.view.View = view.nativeView;
+                let nativeView: android.view.View = view.nativeViewProtected;
                 if (nativeView && nativeView.isSaveFromParentEnabled && nativeView.isSaveFromParentEnabled()) {
                     nativeView.saveHierarchyState(viewStates);
                 }
@@ -182,74 +176,68 @@ let defaultAccentColor: number = undefined;
 function getDefaultAccentColor(context: android.content.Context): number {
     if (defaultAccentColor === undefined) {
         //Fallback color: https://developer.android.com/samples/SlidingTabsColors/src/com.example.android.common/view/SlidingTabStrip.html
-        defaultAccentColor = ad.resources.getPalleteColor(ACCENT_COLOR, context) || 0xFF33B5E5;
+        defaultAccentColor = ad.resources.getPaletteColor(ACCENT_COLOR, context) || 0xFF33B5E5;
     }
     return defaultAccentColor;
 }
 
 export class TabViewItem extends TabViewItemBase {
-    nativeView: android.widget.TextView;
+    nativeViewProtected: android.widget.TextView;
     public tabItemSpec: org.nativescript.widgets.TabItemSpec;
     public index: number;
     private _defaultTransformationMethod: android.text.method.TransformationMethod;
 
     public initNativeView(): void {
         super.initNativeView();
-        if (this.nativeView) {
-            this._defaultTransformationMethod = this.nativeView.getTransformationMethod();
+        if (this.nativeViewProtected) {
+            this._defaultTransformationMethod = this.nativeViewProtected.getTransformationMethod();
         }
     }
 
     public resetNativeView(): void {
         super.resetNativeView();
-        if (this.nativeView) {
+        if (this.nativeViewProtected) {
             // We reset it here too because this could be changed by multiple properties - whiteSpace, secure, textTransform
-            this.nativeView.setTransformationMethod(this._defaultTransformationMethod);
+            this.nativeViewProtected.setTransformationMethod(this._defaultTransformationMethod);
         }
     }
 
     public createNativeView() {
-        return this.nativeView;
-    }
-
-    public setNativeView(textView: android.widget.TextView): void {
-        this.nativeView = textView;
-        if (textView) {
-            initNativeView(this);
-        }
+        return this.nativeViewProtected;
     }
 
     public _update(): void {
-        const tv = this.nativeView;
-        if (tv) {
-            const tabLayout = <org.nativescript.widgets.TabLayout>tv.getParent();
-            tabLayout.updateItemAt(this.index, this.tabItemSpec);
+        const tv = this.nativeViewProtected;
+        const tabView = this.parent as TabView;
+        if (tv && tabView) {
+            this.tabItemSpec = createTabItemSpec(this);
+            tabView.updateAndroidItemAt(this.index, this.tabItemSpec);
         }
     }
 
     [fontSizeProperty.getDefault](): { nativeSize: number } {
-        return { nativeSize: this.nativeView.getTextSize() };
+        return { nativeSize: this.nativeViewProtected.getTextSize() };
     }
     [fontSizeProperty.setNative](value: number | { nativeSize: number }) {
         if (typeof value === "number") {
-            this.nativeView.setTextSize(value);
+            this.nativeViewProtected.setTextSize(value);
         } else {
-            this.nativeView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, value.nativeSize);
+            this.nativeViewProtected.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, value.nativeSize);
         }
     }
 
     [fontInternalProperty.getDefault](): android.graphics.Typeface {
-        return this.nativeView.getTypeface();
+        return this.nativeViewProtected.getTypeface();
     }
     [fontInternalProperty.setNative](value: Font | android.graphics.Typeface) {
-        this.nativeView.setTypeface(value instanceof Font ? value.getAndroidTypeface() : value);
+        this.nativeViewProtected.setTypeface(value instanceof Font ? value.getAndroidTypeface() : value);
     }
 
     [textTransformProperty.getDefault](): "default" {
         return "default";
     }
     [textTransformProperty.setNative](value: TextTransform | "default") {
-        const tv = this.nativeView;
+        const tv = this.nativeViewProtected;
         if (value === "default") {
             tv.setTransformationMethod(this._defaultTransformationMethod);
             tv.setText(this.title);
@@ -311,7 +299,7 @@ export class TabView extends TabViewBase {
             tabLayout.setSelectedIndicatorColors([accentColor]);
         }
 
-        const primaryColor = ad.resources.getPalleteColor(PRIMARY_COLOR, context);
+        const primaryColor = ad.resources.getPaletteColor(PRIMARY_COLOR, context);
         if (primaryColor) {
             tabLayout.setBackgroundColor(primaryColor);
         }
@@ -326,7 +314,7 @@ export class TabView extends TabViewBase {
         const listener = new PageChangedListener(this);
         (<any>viewPager).addOnPageChangeListener(listener);
         (<any>viewPager).listener = listener;
-        
+
         const adapter = new PagerAdapter(this, null);
         viewPager.setAdapter(adapter);
         (<any>viewPager).adapter = adapter;
@@ -340,7 +328,7 @@ export class TabView extends TabViewBase {
             this._androidViewId = android.view.View.generateViewId();
         }
 
-        const nativeView: any = this.nativeView;
+        const nativeView: any = this.nativeViewProtected;
         this._tabLayout = (<any>nativeView).tabLayout;
 
         const viewPager = (<any>nativeView).viewPager;
@@ -369,6 +357,7 @@ export class TabView extends TabViewBase {
         const length = items ? items.length : 0;
         if (length === 0) {
             this._tabLayout.setItems(null, null);
+            this._pagerAdapter.notifyDataSetChanged();
             return;
         }
 
@@ -392,6 +381,10 @@ export class TabView extends TabViewBase {
         });
 
         this._pagerAdapter.notifyDataSetChanged();
+    }
+
+    public updateAndroidItemAt(index: number, spec: org.nativescript.widgets.TabItemSpec) {
+        this._tabLayout.updateItemAt(index, spec);
     }
 
     [androidOffscreenTabLimitProperty.getDefault](): number {
@@ -419,14 +412,14 @@ export class TabView extends TabViewBase {
         selectedIndexProperty.coerce(this);
     }
 
-    [tabBackgroundColorProperty.getDefault](): android.graphics.drawable.Drawable.ConstantState {
-        return this._tabLayout.getBackground().getConstantState();
+    [tabBackgroundColorProperty.getDefault](): android.graphics.drawable.Drawable {
+        return this._tabLayout.getBackground();
     }
-    [tabBackgroundColorProperty.setNative](value: android.graphics.drawable.Drawable.ConstantState | Color) {
+    [tabBackgroundColorProperty.setNative](value: android.graphics.drawable.Drawable | Color) {
         if (value instanceof Color) {
             this._tabLayout.setBackgroundColor(value.android);
         } else {
-            this._tabLayout.setBackground(value ? value.newDrawable() : null);
+            this._tabLayout.setBackground(tryCloneDrawable(value, this.nativeViewProtected.getResources));
         }
     }
 
@@ -454,4 +447,15 @@ export class TabView extends TabViewBase {
         const color = value instanceof Color ? value.android : value;
         tabLayout.setSelectedIndicatorColors([color]);
     }
+}
+
+function tryCloneDrawable(value: android.graphics.drawable.Drawable, resources: android.content.res.Resources): android.graphics.drawable.Drawable {
+    if (value) {
+        const constantState = value.getConstantState();
+        if (constantState) {
+            return constantState.newDrawable(resources);
+        }
+    }
+
+    return value;
 }

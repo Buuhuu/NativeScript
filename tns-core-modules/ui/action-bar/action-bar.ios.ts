@@ -1,5 +1,5 @@
 import { IOSActionItemSettings, ActionItem as ActionItemDefinition } from ".";
-import { ActionItemBase, ActionBarBase, isVisible, View, colorProperty, backgroundColorProperty, backgroundInternalProperty, layout, Color } from "./action-bar-common";
+import { ActionItemBase, ActionBarBase, isVisible, View, colorProperty, backgroundColorProperty, backgroundInternalProperty, flatProperty, layout, Color } from "./action-bar-common";
 import { ImageSource, fromFileOrResource } from "../../image-source";
 
 export * from "./action-bar-common";
@@ -144,6 +144,9 @@ export class ActionBar extends ActionBarBase {
 
         // update colors explicitly - they may have to be cleared form a previous page
         this.updateColors(navigationBar);
+
+        // the 'flat' property may have changed in between pages
+        this.updateFlatness(navigationBar);
     }
 
     private populateMenuItems(navigationItem: UINavigationItem) {
@@ -218,7 +221,7 @@ export class ActionBar extends ActionBarBase {
             navBar.tintColor = null;
         }
 
-        let bgColor = this.backgroundColor;
+        let bgColor = <Color>this.backgroundColor;
         navBar.barTintColor = bgColor ? bgColor.ios : null;
     }
 
@@ -234,6 +237,18 @@ export class ActionBar extends ActionBarBase {
 
         let navigationItem: UINavigationItem = (<UIViewController>page.ios).navigationItem;
         navigationItem.title = this.title;
+    }
+
+    private updateFlatness(navBar: UINavigationBar) {
+        if (this.flat) {
+            navBar.setBackgroundImageForBarMetrics(UIImage.new(), UIBarMetrics.Default);
+            navBar.shadowImage = UIImage.new();
+            navBar.translucent = false;
+        } else {
+            navBar.setBackgroundImageForBarMetrics(null, null);
+            navBar.shadowImage = null;
+            navBar.translucent = true;
+        }
     }
 
     private _navigationBarHeight: number = 0;
@@ -343,5 +358,12 @@ export class ActionBar extends ActionBarBase {
         return null;
     }
     [backgroundInternalProperty.setNative](value: UIColor) { // tslint:disable-line
+    }
+
+    [flatProperty.setNative](value: boolean) { // tslint:disable-line
+        let navBar = this.navBar;
+        if (navBar) {
+            this.updateFlatness(navBar);
+        }
     }
 }

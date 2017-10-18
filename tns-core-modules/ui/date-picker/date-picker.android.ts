@@ -31,7 +31,7 @@ function initializeDateChangedListener(): void {
                 dateChanged = true;
             }
 
-            if ((month + 1) !== owner.month) {
+            if (month !== (owner.month - 1)) {
                 monthProperty.nativeValueChange(owner, month + 1);
                 dateChanged = true;
             }
@@ -51,70 +51,58 @@ function initializeDateChangedListener(): void {
 }
 
 export class DatePicker extends DatePickerBase {
-    nativeView: android.widget.DatePicker;
+    nativeViewProtected: android.widget.DatePicker;
 
     public createNativeView() {
         initializeDateChangedListener();
         const picker = new android.widget.DatePicker(this._context);
         picker.setCalendarViewShown(false);
         const listener = new DateChangedListener(this);
-        picker.init(0, 0, 0, listener);
+
+        picker.init(this.year, this.month - 1, this.day, listener);
         (<any>picker).listener = listener;
         return picker;
     }
 
     public initNativeView(): void {
         super.initNativeView();
-        (<any>this.nativeView).listener.owner = this;
+        (<any>this.nativeViewProtected).listener.owner = this;
     }
 
     public disposeNativeView() {
-        (<any>this.nativeView).listener.owner = null;
+        (<any>this.nativeViewProtected).listener.owner = null;
         super.disposeNativeView();
     }
 
     private updateNativeDate(): void {
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         const year = typeof this.year === "number" ? this.year : nativeView.getYear();
-        const month = typeof this.month === "number" ? (this.month - 1) : nativeView.getMonth();
+        const month = typeof this.month === "number" ? this.month - 1 : nativeView.getMonth();
         const day = typeof this.day === "number" ? this.day : nativeView.getDayOfMonth();
         this.date = new Date(year, month, day);
     }
 
-    [yearProperty.getDefault](): number {
-        return this.nativeView.getYear();
-    }
     [yearProperty.setNative](value: number) {
-        if (this.nativeView.getYear() !== value) {
+        if (this.nativeViewProtected.getYear() !== value) {
             this.updateNativeDate();
         }
     }
 
-    [monthProperty.getDefault](): number {
-        return this.nativeView.getMonth();
-    }
     [monthProperty.setNative](value: number) {
-        if (this.nativeView.getMonth() !== (value - 1)) {
+        if (this.nativeViewProtected.getMonth() !== (value - 1)) {
             this.updateNativeDate();
         }
     }
 
-    [dayProperty.getDefault](): number {
-        return this.nativeView.getDayOfMonth();
-    }
     [dayProperty.setNative](value: number) {
-        if (this.nativeView.getDayOfMonth() !== value) {
+        if (this.nativeViewProtected.getDayOfMonth() !== value) {
             this.updateNativeDate();
         }
     }
 
-    [dateProperty.getDefault](): Date {
-        const nativeView = this.nativeView;
-        return new Date(nativeView.getYear(), nativeView.getMonth(), nativeView.getDayOfMonth());
-    }
     [dateProperty.setNative](value: Date) {
-        const nativeView = this.nativeView;
-        if (nativeView.getDayOfMonth() !== value.getDay()
+        const nativeView = this.nativeViewProtected;
+        if (nativeView.getDayOfMonth() !== value.getDate()
             || nativeView.getMonth() !== value.getMonth()
             || nativeView.getYear() !== value.getFullYear()) {
             nativeView.updateDate(value.getFullYear(), value.getMonth(), value.getDate());
@@ -122,18 +110,18 @@ export class DatePicker extends DatePickerBase {
     }
 
     [maxDateProperty.getDefault](): number {
-        return this.nativeView.getMaxDate();
+        return this.nativeViewProtected.getMaxDate();
     }
     [maxDateProperty.setNative](value: Date | number) {
         const newValue = value instanceof Date ? value.getTime() : value;
-        this.nativeView.setMaxDate(newValue);
+        this.nativeViewProtected.setMaxDate(newValue);
     }
 
     [minDateProperty.getDefault](): number {
-        return this.nativeView.getMinDate();
+        return this.nativeViewProtected.getMinDate();
     }
     [minDateProperty.setNative](value: Date | number) {
         const newValue = value instanceof Date ? value.getTime() : value;
-        this.nativeView.setMinDate(newValue);
+        this.nativeViewProtected.setMinDate(newValue);
     }
 }

@@ -21,6 +21,10 @@ function pageLoaded(args) {
 exports.pageLoaded = pageLoaded;
 // << article-binding-switch-property
 
+export function test_recycling() {
+    helper.nativeView_recycling_test(() => new switchModule.Switch());
+}
+
 export function test_default_TNS_values() {
     // >> article-create-switch
     var mySwitch = new switchModule.Switch();
@@ -56,7 +60,7 @@ if (platform.device.os === platform.platformNames.ios) {
         mySwitch.backgroundColor = new color.Color("red");
 
         function testAction(views: Array<viewModule.View>) {
-            TKUnit.assert(CGColorEqualToColor(mySwitch.backgroundColor.ios.CGColor, mySwitch.ios.onTintColor.CGColor), "mySwitch.color");
+            TKUnit.assert(CGColorEqualToColor((<color.Color>mySwitch.backgroundColor).ios.CGColor, mySwitch.ios.onTintColor.CGColor), "mySwitch.color");
         };
 
         helper.buildUIAndRunTest(mySwitch, testAction);
@@ -138,7 +142,7 @@ export function test_binding_value_to_model() {
 
 function getNativeValue(mySwitch: switchModule.Switch): boolean {
     if (platform.isAndroid) {
-        const nativeView: android.widget.Switch = mySwitch.nativeView;
+        const nativeView: android.widget.Switch = mySwitch.nativeViewProtected;
         return nativeView.isChecked();
     } else if (mySwitch.ios) {
         return mySwitch.ios.on;
@@ -147,7 +151,7 @@ function getNativeValue(mySwitch: switchModule.Switch): boolean {
 
 function setNativeValue(mySwitch: switchModule.Switch, value: boolean) {
     if (platform.isAndroid) {
-        const nativeView: android.widget.Switch = mySwitch.nativeView;
+        const nativeView: android.widget.Switch = mySwitch.nativeViewProtected;
         nativeView.setChecked(value);
     }
     else if (mySwitch.ios) {

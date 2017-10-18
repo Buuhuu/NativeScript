@@ -1,5 +1,6 @@
 ﻿import { ListPickerBase, Color, selectedIndexProperty, itemsProperty, backgroundColorProperty, colorProperty } from "./list-picker-common";
 import { ItemsSource } from ".";
+import { profile } from "../../profiling";
 
 export * from "./list-picker-common";
 
@@ -11,13 +12,12 @@ export class ListPicker extends ListPickerBase {
     constructor() {
         super();
 
-        this.nativeView = this._ios = UIPickerView.new();
+        this.nativeViewProtected = this._ios = UIPickerView.new();
         this._ios.dataSource = this._dataSource = ListPickerDataSource.initWithOwner(new WeakRef(this));
         this._delegate = ListPickerDelegateImpl.initWithOwner(new WeakRef(this));
-
-        this.nativeView = this._ios;
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
         this._ios.delegate = this._delegate;

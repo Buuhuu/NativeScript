@@ -8,6 +8,7 @@ import { resolveFileName } from "../../file-system/file-name-resolver";
 import { knownFolders, path } from "../../file-system";
 import { parse, loadPage } from "../builder";
 import * as application from "../../application";
+import { profile } from "tns-core-modules/profiling";
 
 export { application };
 
@@ -77,71 +78,57 @@ export function reloadPage(): void {
 // attach on global, so it can be overwritten in NativeScript Angular
 (<any>global).__onLiveSyncCore = reloadPage;
 
-export function resolvePageFromEntry(entry: NavigationEntry): Page {
-    let page: Page;
+const entryCreatePage = profile("entry.create", (entry: NavigationEntry): Page => {
+    const page = entry.create();
 
-    if (entry.create) {
-        page = entry.create();
-
-        if (!page) {
-            throw new Error("Failed to create Page with entry.create() function.");
-        }
-
-        page._refreshCss();
-    }
-    else if (entry.moduleName) {
-        // Current app full path.
-        let currentAppPath = knownFolders.currentApp().path;
-        //Full path of the module = current app full path + module name.
-        let moduleNamePath = path.join(currentAppPath, entry.moduleName);
-        traceWrite("frame module path: " + moduleNamePath, traceCategories.Navigation);
-        traceWrite("frame module module: " + entry.moduleName, traceCategories.Navigation);
-
-        let moduleExports;
-        // web-pack case where developers register their page JS file manually.
-        if (global.moduleExists(entry.moduleName)) {
-            if (traceEnabled()) {
-                traceWrite("Loading pre-registered JS module: " + entry.moduleName, traceCategories.Navigation);
-            }
-            moduleExports = global.loadModule(entry.moduleName);
-        } else {
-            let moduleExportsResolvedPath = resolveFileName(moduleNamePath, "js");
-            if (moduleExportsResolvedPath) {
-                if (traceEnabled()) {
-                    traceWrite("Loading JS file: " + moduleExportsResolvedPath, traceCategories.Navigation);
-                }
-
-                // Exclude extension when doing require.
-                moduleExportsResolvedPath = moduleExportsResolvedPath.substr(0, moduleExportsResolvedPath.length - 3)
-                moduleExports = global.loadModule(moduleExportsResolvedPath);
-            }
-        }
-
-        if (moduleExports && moduleExports.createPage) {
-            if (traceEnabled()) {
-                traceWrite("Calling createPage()", traceCategories.Navigation);
-            }
-            page = moduleExports.createPage();
-
-            let cssFileName = resolveFileName(moduleNamePath, "css");
-            // If there is no cssFile only appCss will be applied at loaded.
-            if (cssFileName) {
-                page.addCssFile(cssFileName);
-            }
-        } else {
-            // cssFileName is loaded inside pageFromBuilder->loadPage
-            page = pageFromBuilder(moduleNamePath, moduleExports);
-        }
-
-        if (!page) {
-            throw new Error("Failed to load Page from entry.moduleName: " + entry.moduleName);
-        }
+    if (!page) {
+        throw new Error("Failed to create Page with entry.create() function.");
     }
 
     return page;
+});
+
+interface PageModuleExports {
+    createPage?: () => Page;
 }
 
-function pageFromBuilder(moduleNamePath: string, moduleExports: any): Page {
+const moduleCreatePage = profile("module.createPage", (moduleNamePath: string, moduleExports: PageModuleExports): Page => {
+    if (traceEnabled()) {
+        traceWrite("Calling createPage()", traceCategories.Navigation);
+    }
+    var page = moduleExports.createPage();
+
+    let cssFileName = resolveFileName(moduleNamePath, "css");
+    // If there is no cssFile only appCss will be applied at loaded.
+    if (cssFileName) {
+        page.addCssFile(cssFileName);
+    }
+    return page;
+});
+
+const loadPageModule = profile("loadPageModule", (moduleNamePath: string, entry: NavigationEntry): PageModuleExports => {
+    // web-pack case where developers register their page JS file manually.
+    if (global.moduleExists(entry.moduleName)) {
+        if (traceEnabled()) {
+            traceWrite("Loading pre-registered JS module: " + entry.moduleName, traceCategories.Navigation);
+        }
+        return global.loadModule(entry.moduleName);
+    } else {
+        let moduleExportsResolvedPath = resolveFileName(moduleNamePath, "js");
+        if (moduleExportsResolvedPath) {
+            if (traceEnabled()) {
+                traceWrite("Loading JS file: " + moduleExportsResolvedPath, traceCategories.Navigation);
+            }
+
+            // Exclude extension when doing require.
+            moduleExportsResolvedPath = moduleExportsResolvedPath.substr(0, moduleExportsResolvedPath.length - 3)
+            return global.loadModule(moduleExportsResolvedPath);
+        }
+    }
+    return null;
+});
+
+const pageFromBuilder = profile("pageFromBuilder", (moduleNamePath: string, moduleExports: any): Page => {
     let page: Page;
 
     // Possible XML file path.
@@ -161,7 +148,37 @@ function pageFromBuilder(moduleNamePath: string, moduleExports: any): Page {
     // }
 
     return page;
-}
+});
+
+export const resolvePageFromEntry = profile("resolvePageFromEntry", (entry: NavigationEntry): Page => {
+    let page: Page;
+
+    if (entry.create) {
+        page = entryCreatePage(entry);
+    } else if (entry.moduleName) {
+        // Current app full path.
+        let currentAppPath = knownFolders.currentApp().path;
+        //Full path of the module = current app full path + module name.
+        const moduleNamePath = path.join(currentAppPath, entry.moduleName);
+        traceWrite("frame module path: " + moduleNamePath, traceCategories.Navigation);
+        traceWrite("frame module module: " + entry.moduleName, traceCategories.Navigation);
+
+        const moduleExports = loadPageModule(moduleNamePath, entry);
+
+        if (moduleExports && moduleExports.createPage) {
+            page = moduleCreatePage(moduleNamePath, moduleExports);
+        } else {
+            // cssFileName is loaded inside pageFromBuilder->loadPage
+            page = pageFromBuilder(moduleNamePath, moduleExports);
+        }
+
+        if (!page) {
+            throw new Error("Failed to load page XML file for module: " + entry.moduleName);
+        }
+    }
+
+    return page;
+});
 
 export interface NavigationContext {
     entry: BackstackEntry;
@@ -260,8 +277,8 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
             traceWrite(`NAVIGATE`, traceCategories.Navigation);
         }
 
-        let entry = buildEntryFromArgs(param);
-        let page = resolvePageFromEntry(entry);
+        const entry = buildEntryFromArgs(param);
+        const page = resolvePageFromEntry(entry);
 
         // Attempts to implement https://github.com/NativeScript/NativeScript/issues/1311
         // if (page["isBiOrientational"] && entry.moduleName && !this._subscribedToOrientationChangedEvent){
@@ -275,16 +292,14 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
 
         this._pushInFrameStack();
 
-        let backstackEntry: BackstackEntry = {
+        const backstackEntry: BackstackEntry = {
             entry: entry,
             resolvedPage: page,
             navDepth: undefined,
-            fragmentTag: undefined,
-            isBack: undefined,
-            isNavigation: true
+            fragmentTag: undefined
         };
 
-        let navigationContext: NavigationContext = {
+        const navigationContext: NavigationContext = {
             entry: backstackEntry,
             isBackNavigation: false
         }
@@ -293,12 +308,19 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
 
         if (this._navigationQueue.length === 1) {
             this._processNavigationContext(navigationContext);
-        }
-        else {
+        } else {
             if (traceEnabled()) {
                 traceWrite(`Navigation scheduled`, traceCategories.Navigation);
             }
         }
+    }
+
+    public isCurrent(entry: BackstackEntry): boolean {
+        return this._currentEntry === entry;
+    }
+
+    public setCurrent(entry: BackstackEntry): void {
+        this._currentEntry = entry;
     }
 
     public _processNavigationQueue(page: Page) {
@@ -310,7 +332,8 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
         let entry = this._navigationQueue[0].entry;
         let currentNavigationPage = entry.resolvedPage;
         if (page !== currentNavigationPage) {
-            throw new Error(`Corrupted navigation stack; page: ${page}; currentNavigationPage: ${currentNavigationPage}`);
+            // If the page is not the one that requested navigation - skip it.
+            return;
         }
 
         // remove completed operation.
@@ -324,6 +347,22 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
         this._updateActionBar();
     }
 
+    public _findEntryForTag(fragmentTag: string): BackstackEntry {
+        let entry: BackstackEntry;
+        if (this._currentEntry && this._currentEntry.fragmentTag === fragmentTag) {
+            entry = this._currentEntry;
+        } else {
+            entry = this._backStack.find((value) => value.fragmentTag === fragmentTag);
+            // on API 26 fragments are recreated lazily after activity is destroyed.
+            if (!entry) {
+                const navigationItem = this._navigationQueue.find((value) => value.entry.fragmentTag === fragmentTag);
+                entry = navigationItem ? navigationItem.entry : undefined;
+            }
+        }
+
+        return entry;
+    }
+
     public navigationQueueIsEmpty(): boolean {
         return this._navigationQueue.length === 0;
     }
@@ -333,8 +372,8 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
             return false;
         }
 
-        let backstackVisibleValue = entry.entry.backstackVisible;
-        let backstackHidden = backstackVisibleValue !== undefined && !backstackVisibleValue;
+        const backstackVisibleValue = entry.entry.backstackVisible;
+        const backstackHidden = backstackVisibleValue !== undefined && !backstackVisibleValue;
 
         return !backstackHidden;
     }
@@ -346,30 +385,29 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
     protected _processNavigationContext(navigationContext: NavigationContext) {
         if (navigationContext.isBackNavigation) {
             this.performGoBack(navigationContext);
-        }
-        else {
+        } else {
             this.performNavigation(navigationContext);
         }
     }
 
+    @profile
     private performNavigation(navigationContext: NavigationContext) {
         let navContext = navigationContext.entry;
 
         // TODO: This should happen once navigation is completed.
         if (navigationContext.entry.entry.clearHistory) {
             this._backStack.length = 0;
-        }
-        else if (FrameBase._isEntryBackstackVisible(this._currentEntry)) {
+        } else if (FrameBase._isEntryBackstackVisible(this._currentEntry)) {
             this._backStack.push(this._currentEntry);
         }
 
         this._onNavigatingTo(navContext, navigationContext.isBackNavigation);
-
         this._navigateCore(navContext);
     }
 
+    @profile
     private performGoBack(navigationContext: NavigationContext) {
-        let navContext = navigationContext.entry;
+        const navContext = navigationContext.entry;
         this._onNavigatingTo(navContext, navigationContext.isBackNavigation);
         this._goBackCore(navContext);
     }
@@ -444,7 +482,7 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
             return;
         }
 
-        let top = topmost();
+        const top = topmost();
         if (top !== this) {
             throw new Error("Cannot pop a Frame which is not at the top of the navigation stack.");
         }
@@ -478,8 +516,8 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
 
         return FrameBase.defaultAnimatedNavigation;
     }
-    public _getNavigationTransition(entry: NavigationEntry): NavigationTransition {
 
+    public _getNavigationTransition(entry: NavigationEntry): NavigationTransition {
         if (entry) {
             if (isIOS && entry.transitioniOS !== undefined) {
                 return entry.transitioniOS;
@@ -520,7 +558,7 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
     }
 
     public _printFrameBackStack() {
-        let length = this.backStack.length;
+        const length = this.backStack.length;
         let i = length - 1;
         console.log(`Frame Back Stack: `);
         while (i >= 0) {
@@ -532,7 +570,7 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
     public _backstackEntryTrace(b: BackstackEntry): string {
         let result = `${b.resolvedPage}`;
 
-        let backstackVisible = FrameBase._isEntryBackstackVisible(b);
+        const backstackVisible = FrameBase._isEntryBackstackVisible(b);
         if (!backstackVisible) {
             result += ` | INVISIBLE`;
         }
@@ -541,12 +579,12 @@ export class FrameBase extends CustomLayoutView implements FrameDefinition {
             result += ` | CLEAR HISTORY`;
         }
 
-        let animated = this._getIsAnimatedNavigation(b.entry);
+        const animated = this._getIsAnimatedNavigation(b.entry);
         if (!animated) {
             result += ` | NOT ANIMATED`;
         }
 
-        let t = this._getNavigationTransition(b.entry);
+        const t = this._getNavigationTransition(b.entry);
         if (t) {
             result += ` | Transition[${JSON.stringify(t)}]`;
         }
@@ -564,7 +602,7 @@ export function topmost(): FrameBase {
 }
 
 export function goBack(): boolean {
-    let top = topmost();
+    const top = topmost();
     if (top.canGoBack()) {
         top.goBack();
         return true;

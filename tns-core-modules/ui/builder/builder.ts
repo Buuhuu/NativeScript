@@ -10,6 +10,7 @@ import { isString, isDefined } from "../../utils/types";
 import { ComponentModule, setPropertyValue, getComponentModule } from "./component-builder";
 import { platformNames, device } from "../../platform";
 import { resolveFileName } from "../../file-system/file-name-resolver";
+import { profile } from "tns-core-modules/profiling";
 import * as traceModule from "../../trace";
 
 const ios = platformNames.ios.toLowerCase();
@@ -445,34 +446,37 @@ namespace xml2ui {
                 this._state = TemplateParser.State.FINISHED;
 
                 if (this._setTemplateProperty && this._templateProperty.name in this._templateProperty.parent.component) {
-                    let template = this._build();
+                    let template = this.buildTemplate();
                     this._templateProperty.parent.component[this._templateProperty.name] = template;
                 }
             }
         }
 
-        public _build(): Template {
+        public buildTemplate(): Template {
             var context = this._context;
             var errorFormat = this._templateProperty.errorFormat;
             var sourceTracker = this._templateProperty.sourceTracker;
-            var template: Template = () => {
+            var template: Template = profile("Template()", () => {
                 var start: xml2ui.XmlArgsReplay;
                 var ui: xml2ui.ComponentParser;
 
                 (start = new xml2ui.XmlArgsReplay(this._recordedXmlStream, errorFormat))
-                    // No platform filter, it has been filtered allready
+                    // No platform filter, it has been filtered already
                     .pipe(new XmlStateParser(ui = new ComponentParser(context, errorFormat, sourceTracker)));
 
                 start.replay();
 
                 return ui.rootComponentModule.component;
-            }
+            });
             return template;
         }
     }
 
     export class MultiTemplateParser implements XmlStateConsumer {
         private _childParsers = new Array<TemplateParser>();
+        private _value: KeyedTemplate[];
+
+        get value(): KeyedTemplate[] { return this._value; }
 
         constructor(private parent: XmlStateConsumer, private templateProperty: TemplateProperty) {
         }
@@ -492,11 +496,11 @@ namespace xml2ui {
                     for (let i = 0; i < this._childParsers.length; i++) {
                         templates.push({
                             key: this._childParsers[i]["key"],
-                            createView: this._childParsers[i]._build()
+                            createView: this._childParsers[i].buildTemplate()
                         });
                     }
-                    this.templateProperty.parent.component[this.templateProperty.name] = templates;
-                    return this.parent;
+                    this._value = templates;
+                    return this.parent.parse(args);
                 }
             }
 
@@ -535,6 +539,22 @@ namespace xml2ui {
             this.sourceTracker = sourceTracker;
         }
 
+        @profile
+        private buildComponent(args: xml.ParserEvent): ComponentModule {
+            if (args.prefix && args.namespace) {
+                // Custom components
+                return loadCustomComponent(args.namespace, args.elementName, args.attributes, this.context, this.currentRootView);
+            } else {
+                // Default components
+                let namespace = args.namespace;
+                if (defaultNameSpaceMatcher.test(namespace || '')) {
+                    //Ignore the default ...tns.xsd namespace URL
+                    namespace = undefined;
+                }
+                return getComponentModule(args.elementName, namespace, args.attributes, this.context, this.moduleNamePath);
+            }
+        }
+
         public parse(args: xml.ParserEvent): XmlStateConsumer {
 
             // Get the current parent.
@@ -547,11 +567,12 @@ namespace xml2ui {
 
                     var name = ComponentParser.getComplexPropertyName(args.elementName);
 
-                    this.complexProperties.push({
+                    const complexProperty: ComponentParser.ComplexProperty = {
                         parent: parent,
                         name: name,
-                        items: [],
-                    });
+                        items: []
+                    };
+                    this.complexProperties.push(complexProperty);
 
                     if (ComponentParser.isKnownTemplate(name, parent.exports)) {
                         return new TemplateParser(this, {
@@ -566,7 +587,7 @@ namespace xml2ui {
                     }
 
                     if (ComponentParser.isKnownMultiTemplate(name, parent.exports)) {
-                        return new MultiTemplateParser(this, {
+                        const parser = new MultiTemplateParser(this, {
                             context: (parent ? getExports(parent.component) : null) || this.context, // Passing 'context' won't work if you set "codeFile" on the page
                             parent: parent,
                             name: name,
@@ -575,24 +596,13 @@ namespace xml2ui {
                             errorFormat: this.error,
                             sourceTracker: this.sourceTracker
                         });
+                        complexProperty.parser = parser;
+                        return parser;
                     }
 
                 } else {
 
-                    var componentModule: ComponentModule;
-
-                    if (args.prefix && args.namespace) {
-                        // Custom components
-                        componentModule = loadCustomComponent(args.namespace, args.elementName, args.attributes, this.context, this.currentRootView);
-                    } else {
-                        // Default components
-                        let namespace = args.namespace;
-                        if (defaultNameSpaceMatcher.test(namespace || '')) {
-                            //Ignore the default ...tns.xsd namespace URL
-                            namespace = undefined;
-                        }
-                        componentModule = getComponentModule(args.elementName, namespace, args.attributes, this.context, this.moduleNamePath);
-                    }
+                    var componentModule = this.buildComponent(args);
 
                     if (componentModule) {
                         this.sourceTracker(componentModule.component, args.position);
@@ -624,7 +634,9 @@ namespace xml2ui {
             } else if (args.eventType === xml.ParserEventType.EndElement) {
                 if (ComponentParser.isComplexProperty(args.elementName)) {
                     if (complexProperty) {
-                        if (parent && (<any>parent.component)._addArrayFromBuilder) {
+                        if (complexProperty.parser) {
+                            parent.component[complexProperty.name] = complexProperty.parser.value;
+                        } else if (parent && (<any>parent.component)._addArrayFromBuilder) {
                             // If parent is AddArrayFromBuilder call the interface method to populate the array property.
                             (<any>parent.component)._addArrayFromBuilder(complexProperty.name, complexProperty.items);
                             complexProperty.items = [];
@@ -639,7 +651,7 @@ namespace xml2ui {
                 }
             }
 
-            return this;
+             return this;
         }
 
         private static isComplexProperty(name: string): boolean {
@@ -688,6 +700,7 @@ namespace xml2ui {
             parent: ComponentModule;
             name: string;
             items?: Array<any>;
+            parser?: { value: any; };
         }
     }
 }

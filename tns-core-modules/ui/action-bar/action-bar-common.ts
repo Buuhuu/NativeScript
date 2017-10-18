@@ -5,9 +5,11 @@
     NavigationButton, IOSActionItemSettings, AndroidActionItemSettings, AndroidActionBarSettings
 } from ".";
 
+import { profile } from "../../profiling";
+
 export * from "../core/view";
 
-import { View, ViewBase, Property, unsetValue, horizontalAlignmentProperty, verticalAlignmentProperty } from "../core/view";
+import { View, ViewBase, Property, unsetValue, booleanConverter, horizontalAlignmentProperty, verticalAlignmentProperty } from "../core/view";
 
 export module knownCollections {
     export var actionItems = "actionItems";
@@ -19,6 +21,7 @@ export class ActionBarBase extends View implements ActionBarDefinition {
     private _titleView: View;
 
     public title: string;
+    public flat: boolean;
 
     get navigationButton(): NavigationButton {
         return this._navigationButton;
@@ -262,8 +265,6 @@ export class ActionItemBase extends ViewBase implements ActionItemDefinition {
 
             if (this._actionView) {
                 this._addView(this._actionView);
-                this._actionView.style[horizontalAlignmentProperty.cssName] = "center";
-                this._actionView.style[verticalAlignmentProperty.cssName] = "middle";
             }
 
             if (this._actionBar) {
@@ -279,6 +280,15 @@ export class ActionItemBase extends ViewBase implements ActionItemDefinition {
         if (value !== this._actionBar) {
             this._actionBar = value;
         }
+    }
+
+    @profile
+    public onLoaded() {
+        if (this._actionView) {
+            this._actionView.style[horizontalAlignmentProperty.cssName] = "center";
+            this._actionView.style[verticalAlignmentProperty.cssName] = "middle";
+        }
+        super.onLoaded();
     }
 
     public _raiseTap() {
@@ -321,3 +331,6 @@ iconProperty.register(ActionItemBase);
 
 let visibilityProperty = new Property({ name: "visibility", defaultValue: "visible", valueChanged: onItemChanged });
 visibilityProperty.register(ActionItemBase);
+
+export const flatProperty = new Property<ActionBarBase, boolean>({ name: "flat", defaultValue: false, valueConverter: booleanConverter });
+flatProperty.register(ActionBarBase);

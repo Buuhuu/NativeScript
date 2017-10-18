@@ -1,11 +1,14 @@
-﻿import { AnimationDefinition } from ".";
+﻿// Definitions.
+import { AnimationDefinition } from ".";
+import { View } from "../core/view";
+
 import { AnimationBase, Properties, PropertyAnimation, CubicBezierAnimationCurve, AnimationPromise, Color, traceWrite, traceEnabled, traceCategories } from "./animation-common";
 import {
     opacityProperty, backgroundColorProperty, rotateProperty,
     translateXProperty, translateYProperty, scaleXProperty, scaleYProperty
 } from "../styling/style-properties";
 
-import { CacheLayerType, layout } from "../../utils/utils";
+import { layout } from "../../utils/utils";
 import lazy from "../../utils/lazy";
 
 export * from "./animation-common";
@@ -88,6 +91,7 @@ export class Animation extends AnimationBase {
     private _propertyUpdateCallbacks: Array<Function>;
     private _propertyResetCallbacks: Array<Function>;
     private _valueSource: "animation" | "keyframe";
+    private _target: View;
 
     constructor(animationDefinitions: Array<AnimationDefinitionInternal>, playSequentially?: boolean) {
         super(animationDefinitions, playSequentially);
@@ -157,8 +161,6 @@ export class Animation extends AnimationBase {
             }
         }
 
-        this._enableHardwareAcceleration();
-
         if (traceEnabled()) {
             traceWrite("Starting " + this._nativeAnimatorsArray.length + " animations " + (this._playSequentially ? "sequentially." : "together."), traceCategories.Animation);
         }
@@ -185,27 +187,25 @@ export class Animation extends AnimationBase {
             return;
         }
 
-        let i = 0;
-        let length = this._propertyUpdateCallbacks.length;
-        for (; i < length; i++) {
-            this._propertyUpdateCallbacks[i]();
-        }
-        this._disableHardwareAcceleration();
+        this._propertyUpdateCallbacks.forEach(v => v());
         this._resolveAnimationFinishedPromise();
+
+        if (this._target) {
+            this._target._removeAnimation(this);
+        }
     }
 
     private _onAndroidAnimationCancel() { // tslint:disable-line 
-        let i = 0;
-        let length = this._propertyResetCallbacks.length;
-        for (; i < length; i++) {
-            this._propertyResetCallbacks[i]();
-        }
-        this._disableHardwareAcceleration();
+        this._propertyResetCallbacks.forEach(v => v());
         this._rejectAnimationFinishedPromise();
+
+        if (this._target) {
+            this._target._removeAnimation(this);
+        }
     }
 
     private _createAnimators(propertyAnimation: PropertyAnimation): void {
-        if (!propertyAnimation.target.nativeView) {
+        if (!propertyAnimation.target.nativeViewProtected) {
             return;
         }
 
@@ -225,14 +225,16 @@ export class Animation extends AnimationBase {
             throw new Error(`Animation value cannot be null or undefined; target: ${propertyAnimation.target}; property: ${propertyAnimation.property};`);
         }
 
+        this._target = propertyAnimation.target;
+
         let nativeArray;
-        let nativeView = <android.view.View>propertyAnimation.target.nativeView;
-        let animators = new Array<android.animation.Animator>();
-        let propertyUpdateCallbacks = new Array<Function>();
-        let propertyResetCallbacks = new Array<Function>();
+        const nativeView = <android.view.View>propertyAnimation.target.nativeViewProtected;
+        const animators = new Array<android.animation.Animator>();
+        const propertyUpdateCallbacks = new Array<Function>();
+        const propertyResetCallbacks = new Array<Function>();
         let originalValue1;
         let originalValue2;
-        let density = layout.getDisplayDensity();
+        const density = layout.getDisplayDensity();
         let xyObjectAnimators: any;
         let animatorSet: android.animation.AnimatorSet;
 
@@ -250,9 +252,11 @@ export class Animation extends AnimationBase {
         }
 
         let setLocal = this._valueSource === "animation";
-
+        const style = propertyAnimation.target.style;
         switch (propertyAnimation.property) {
             case Properties.opacity:
+                opacityProperty._initDefaultNativeValue(style);
+
                 originalValue1 = nativeView.getAlpha();
                 nativeArray = Array.create("float", 1);
                 nativeArray[0] = propertyAnimation.value;
@@ -265,7 +269,7 @@ export class Animation extends AnimationBase {
                     } else {
                         propertyAnimation.target.style[opacityProperty.keyframe] = originalValue1;
                     }
-                    if (propertyAnimation.target.nativeView) {
+                    if (propertyAnimation.target.nativeViewProtected) {
                         propertyAnimation.target[opacityProperty.setNative](propertyAnimation.target.style.opacity);
                     }
                 }));
@@ -273,6 +277,8 @@ export class Animation extends AnimationBase {
                 break;
 
             case Properties.backgroundColor:
+                backgroundColorProperty._initDefaultNativeValue(style);
+
                 ensureArgbEvaluator();
                 originalValue1 = propertyAnimation.target.backgroundColor;
                 nativeArray = Array.create(java.lang.Object, 2);
@@ -294,15 +300,19 @@ export class Animation extends AnimationBase {
                         propertyAnimation.target.style[backgroundColorProperty.name] = originalValue1;
                     } else {
                         propertyAnimation.target.style[backgroundColorProperty.keyframe] = originalValue1;
-                        if (propertyAnimation.target.nativeView && propertyAnimation.target[backgroundColorProperty.setNative]) {
-                            propertyAnimation.target[backgroundColorProperty.setNative](propertyAnimation.target.style.backgroundColor);
-                        }
+                    }
+                    
+                    if (propertyAnimation.target.nativeViewProtected && propertyAnimation.target[backgroundColorProperty.setNative]) {
+                        propertyAnimation.target[backgroundColorProperty.setNative](propertyAnimation.target.style.backgroundColor);
                     }
                 }));
                 animators.push(animator);
                 break;
 
             case Properties.translate:
+                translateXProperty._initDefaultNativeValue(style);
+                translateYProperty._initDefaultNativeValue(style);
+
                 xyObjectAnimators = Array.create(android.animation.Animator, 2);
 
                 nativeArray = Array.create("float", 1);
@@ -330,10 +340,11 @@ export class Animation extends AnimationBase {
                     } else {
                         propertyAnimation.target.style[translateXProperty.keyframe] = originalValue1;
                         propertyAnimation.target.style[translateYProperty.keyframe] = originalValue2;
-                        if (propertyAnimation.target.nativeView) {
-                            propertyAnimation.target[translateXProperty.setNative](propertyAnimation.target.style.translateX);
-                            propertyAnimation.target[translateYProperty.setNative](propertyAnimation.target.style.translateY);
-                        }
+                    }
+
+                    if (propertyAnimation.target.nativeViewProtected) {
+                        propertyAnimation.target[translateXProperty.setNative](propertyAnimation.target.style.translateX);
+                        propertyAnimation.target[translateYProperty.setNative](propertyAnimation.target.style.translateY);
                     }
                 }));
 
@@ -344,6 +355,9 @@ export class Animation extends AnimationBase {
                 break;
 
             case Properties.scale:
+                scaleXProperty._initDefaultNativeValue(style);
+                scaleYProperty._initDefaultNativeValue(style);
+
                 xyObjectAnimators = Array.create(android.animation.Animator, 2);
 
                 nativeArray = Array.create("float", 1);
@@ -371,10 +385,11 @@ export class Animation extends AnimationBase {
                     } else {
                         propertyAnimation.target.style[scaleXProperty.keyframe] = originalValue1;
                         propertyAnimation.target.style[scaleYProperty.keyframe] = originalValue2;
-                        if (propertyAnimation.target.nativeView) {
-                            propertyAnimation.target[scaleXProperty.setNative](propertyAnimation.target.style.scaleX);
-                            propertyAnimation.target[scaleYProperty.setNative](propertyAnimation.target.style.scaleY);
-                        }
+                    }
+
+                    if (propertyAnimation.target.nativeViewProtected) {
+                        propertyAnimation.target[scaleXProperty.setNative](propertyAnimation.target.style.scaleX);
+                        propertyAnimation.target[scaleYProperty.setNative](propertyAnimation.target.style.scaleY);
                     }
                 }));
 
@@ -385,6 +400,8 @@ export class Animation extends AnimationBase {
                 break;
 
             case Properties.rotate:
+                rotateProperty._initDefaultNativeValue(style);
+
                 originalValue1 = nativeView.getRotation();
                 nativeArray = Array.create("float", 1);
                 nativeArray[0] = propertyAnimation.value;
@@ -396,9 +413,10 @@ export class Animation extends AnimationBase {
                         propertyAnimation.target.style[rotateProperty.name] = originalValue1;
                     } else {
                         propertyAnimation.target.style[rotateProperty.keyframe] = originalValue1;
-                        if (propertyAnimation.target.nativeView) {
-                            propertyAnimation.target[rotateProperty.setNative](propertyAnimation.target.style.rotate);
-                        }
+                    }
+                    
+                    if (propertyAnimation.target.nativeViewProtected) {
+                        propertyAnimation.target[rotateProperty.setNative](propertyAnimation.target.style.rotate);
                     }
                 }));
                 animators.push(android.animation.ObjectAnimator.ofFloat(nativeView, "rotation", nativeArray));
@@ -442,28 +460,5 @@ export class Animation extends AnimationBase {
 
     private static _getAndroidRepeatCount(iterations: number): number {
         return (iterations === Number.POSITIVE_INFINITY) ? android.view.animation.Animation.INFINITE : iterations - 1;
-    }
-
-    private _enableHardwareAcceleration() {
-        for (let i = 0, length = this._propertyAnimations.length; i < length; i++) {
-            let cache = <CacheLayerType>this._propertyAnimations[i].target.nativeView;
-            if (cache) {
-                let layerType = cache.getLayerType();
-                if (layerType !== android.view.View.LAYER_TYPE_HARDWARE) {
-                    cache.layerType = layerType;
-                    cache.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null);
-                }
-            }
-        }
-    }
-
-    private _disableHardwareAcceleration() {
-        for (let i = 0, length = this._propertyAnimations.length; i < length; i++) {
-            let cache = <CacheLayerType>this._propertyAnimations[i].target.nativeView;
-            if (cache && cache.layerType !== undefined) {
-                cache.setLayerType(cache.layerType, null);
-                cache.layerType = undefined;
-            }
-        }
     }
 }

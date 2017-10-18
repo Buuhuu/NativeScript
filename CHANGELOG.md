@@ -1,6 +1,80 @@
 Cross Platform Modules Changelog
 ==============================
 
+## 3.2.0 (2017, September 07)
+
+### Fixed
+
+- [(# 4728)](https://github.com/NativeScript/NativeScript/issues/4728) Android: A crash where some Drawables do not implement getConstantState
+- [(# 4424)](https://github.com/NativeScript/NativeScript/issues/4424) Android: Slider's value does not work when maxValue set
+- [(# 4230)](https://github.com/NativeScript/NativeScript/issues/4230) IOS: A crash when setting FontFamily to Font-Awesome on a Span
+- [(# 4733)](https://github.com/NativeScript/NativeScript/issues/4733) IOS: A TextView scrolling and sizing issue
+- [(# 4302)](https://github.com/NativeScript/NativeScript/issues/4302) IOS: Icon fonts does not work for TabViewItem
+- [(# 4582)](https://github.com/NativeScript/NativeScript/issues/4582) IOS: Label with formatted text and theme classes crashes
+- [(# 4138)](https://github.com/NativeScript/NativeScript/issues/4138) Cannot change TabView icon
+- [(# 4419)](https://github.com/NativeScript/NativeScript/issues/4419) Debugger.js exception for HTTP requests with no Content-Type
+- [(# 4650)](https://github.com/NativeScript/NativeScript/issues/4650) Image replacement is not respected during tns run android 
+- [(# 3963)](https://github.com/NativeScript/NativeScript/issues/3963) ListView multiple item templates do not work inside a TabView
+- [(# 4647)](https://github.com/NativeScript/NativeScript/issues/4647) Rename utils.ad.getPalleteColor to getPaletteColor
+- [(# 4725)](https://github.com/NativeScript/NativeScript/pull/4725) Remove ListView selected state when rowHeight is set
+
+### New
+- [(# 4808)](https://github.com/NativeScript/NativeScript/issues/4808) Android: Keep nativeViews when navigating forward
+- [(# 4464)](https://github.com/NativeScript/NativeScript/issues/4464) Enable overlap for custom transitions
+- [(# 2181)](https://github.com/NativeScript/NativeScript/issues/2181) Focus and blur events
+
+## 3.1.1 (2017, August 08)
+
+### Fixed
+- [(# 4514)](https://github.com/NativeScript/NativeScript/issues/4514) IOS: Text/xml content type not treated as text 
+- [(# 4450)](https://github.com/NativeScript/NativeScript/issues/4450) IOS: TNS 3.1 breaks background-color through css binding 
+- [(# 4443)](https://github.com/NativeScript/NativeScript/issues/4443) IOS: Can't load local files in a WebView on device 
+- [(# 4415)](https://github.com/NativeScript/NativeScript/issues/4415) Style error when setting background after upgrading to NS 3
+- [(# 4342)](https://github.com/NativeScript/NativeScript/issues/4342) Unable to change the fontWeight. 
+- [(# 4322)](https://github.com/NativeScript/NativeScript/issues/4322) Flashing border on scroll within ListView on Android when border-radius is applied 
+- [(# 4283)](https://github.com/NativeScript/NativeScript/issues/4283) IOS: ActionBar will appear broken when internet sharing bar is displayed 
+- [(# 4046)](https://github.com/NativeScript/NativeScript/issues/4046) Animating a view is broken and freezes the animated properties 
+
+### New
+- [(# 4522)](https://github.com/NativeScript/NativeScript/issues/4522) Allow toggling of ScrollBar indicators on ScrollView 
+- [(# 2740)](https://github.com/NativeScript/NativeScript/issues/2740) Improved ActionBar CSS Support 
+- [(# 1664)](https://github.com/NativeScript/NativeScript/issues/1664) Implemented css line-height property
+
+## 3.1.0 (2017, June 22)
+
+### Fixed
+
+- [(# 4147)](https://github.com/NativeScript/NativeScript/issues/4147) SearchBar style creates error
+- [(# 4272)](https://github.com/NativeScript/NativeScript/issues/4272) SearchBar is not displayed on Android API 24
+- [(# 4287)](https://github.com/NativeScript/NativeScript/issues/4287) Margin value with TextWrap overlapping problem
+- [(# 4266)](https://github.com/NativeScript/NativeScript/issues/4266) IOS: Wrapped text in Button not properly centered
+- [(# 3354)](https://github.com/NativeScript/NativeScript/issues/3354) IOS: TextView hint becomes text
+
+### New
+
+- [(# 3614)](https://github.com/NativeScript/NativeScript/issues/3614) TextField `maxLength` property support
+- [(# 3957)](https://github.com/NativeScript/NativeScript/issues/3957) http.getFile(url) should strip query string from saved file name
+
+## 3.0.1 (2017, May 23)
+
+### Fixed
+
+- [(# 4103)](https://github.com/NativeScript/NativeScript/issues/4103) A problem with base64 encoded images in Image element
+- [(# 4143)](https://github.com/NativeScript/NativeScript/issues/4143) Background Image Failing
+- [(# 4127)](https://github.com/NativeScript/NativeScript/issues/4127) Binding to 'bindingContext' of View is not working
+- [(# 4015)](https://github.com/NativeScript/NativeScript/issues/4015) Crash: View already has a parent on Android 7.0 with Split screen + pageTransitions
+- [(# 3747)](https://github.com/NativeScript/NativeScript/issues/3747) Images randomly get swapped on Android
+- [(# 3960)](https://github.com/NativeScript/NativeScript/issues/3960) TabView with ScrollView and MapView crashes
+- [(# 3983)](https://github.com/NativeScript/NativeScript/issues/3983) TextField: "0000" hint truncated to "0"
+- [(# 4135)](https://github.com/NativeScript/NativeScript/issues/4135) TextField: If the secure property is true, the text property doesn't work properly
+- [(# 4123)](https://github.com/NativeScript/NativeScript/issues/4123) Android: Pressing ENTER key from hardware keyboard in TextView throws an exception
+- [(# 4109)](https://github.com/NativeScript/NativeScript/issues/4109) Android: Formatted string does not work if defined in XML
+- [(# 4022)](https://github.com/NativeScript/NativeScript/issues/4022) Android: TabView & ScrollView causes crash on resume
+- [(# 4175)](https://github.com/NativeScript/NativeScript/issues/4175) IOS: Switch not visible
+- [(# 4141)](https://github.com/NativeScript/NativeScript/issues/4141) IOS: ActionBar will be hidden after closeCallback of modal page
+- [(# 4157)](https://github.com/NativeScript/NativeScript/issues/4157) IOS: Hidden ActionBar will be shown by showModal()
+- [(# 4151)](https://github.com/NativeScript/NativeScript/issues/4151) IOS: Layout will not update on modal page
+
 ## 3.0.0 (2017, May 03)
 
 ### BREAKING CHANGES
@@ -26,6 +100,12 @@ A full list of breaking changes could be found [here](https://github.com/NativeS
 - [(# 3872)](https://github.com/NativeScript/NativeScript/issues/3872) Can't load a local HTML file with querystring via WebView.src (WebView.url works but is removed)
 - [(# 3118)](https://github.com/NativeScript/NativeScript/issues/3118) Feature: New Dialog-Prompt-Input-Type for E-Mails
 - [(# 3642)](https://github.com/NativeScript/NativeScript/issues/3642) BREAKING: Make typings compatible with DOM and Node typings
+
+## 2.5.3 (2017, June 29)
+
+### Fixed
+
+- [(#4342)](https://github.com/NativeScript/NativeScript/issues/4342) Unable to change the fontWeight for both iOS and Android
 
 ## 2.5.2 (2017, March 21)
 

@@ -104,6 +104,16 @@ export class Frame extends View {
     //@private
     /**
      * @private
+     * @param entry to check
+     */
+    isCurrent(entry: BackstackEntry): boolean;
+    /**
+     * @private
+     * @param entry to set as current
+     */
+    setCurrent(entry: BackstackEntry): void;
+    /**
+     * @private
      */
     navigationQueueIsEmpty(): boolean;
     /**
@@ -122,6 +132,10 @@ export class Frame extends View {
      * @private
      */
     _getNavBarVisible(page: Page): boolean;
+    /**
+     * @private
+     */
+    _findEntryForTag(fragmentTag: string): BackstackEntry;
     //@endprivate
 
     /**
@@ -248,7 +262,7 @@ export interface NavigationTransition {
     duration?: number;
 
     /**
-     * An optional transition animation curve. Possible values are contained in the [AnimationCurve enumeration](../enums/AnimationCurve/README.md).
+     * An optional transition animation curve. Possible values are contained in the [AnimationCurve enumeration](https://docs.nativescript.org/api-reference/modules/_ui_enums_.animationcurve.html).
      * Alternatively, you can pass an instance of type UIViewAnimationCurve for iOS or android.animation.TimeInterpolator for Android.
      */
     curve?: any;
@@ -270,14 +284,6 @@ export interface BackstackEntry {
      * @private
      */
     fragmentTag: string;
-    /**
-     * @private
-     */
-    isBack: boolean;
-    /**
-     * @private
-     */
-    isNavigation: boolean;
     //@endprivate
 }
 
@@ -330,6 +336,7 @@ export interface AndroidFrame extends Observable {
 
     /**
      * Gets or sets whether the page UI will be cached when navigating away from the page.
+     * Deprecated. This property is not used internally.
      */
     cachePagesOnNavigate: boolean;
 

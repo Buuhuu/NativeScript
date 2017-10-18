@@ -1,13 +1,14 @@
 ﻿import { Page as PageDefinition, NavigatedData, ShownModallyData } from ".";
 import {
     ContentView, View, eachDescendant, Property, CssProperty, Color, isIOS,
-    booleanConverter, resetCSSProperties, Style
+    booleanConverter, resetCSSProperties, Style, EventData
 } from "../content-view";
 import { Frame, topmost as topmostFrame, resolvePageFromEntry } from "../frame";
 import { ActionBar } from "../action-bar";
 import { KeyframeAnimationInfo } from "../animation/keyframe-animation";
 import { StyleScope } from "../styling/style-scope";
 import { File, path, knownFolders } from "../../file-system";
+import { profile } from "../../profiling";
 
 export * from "../content-view";
 
@@ -21,14 +22,12 @@ export class PageBase extends ContentView implements PageDefinition {
     public static showingModallyEvent = "showingModally";
 
     protected _closeModalCallback: Function;
-    private _modalContext: any;
 
+    private _modalContext: any;
     private _navigationContext: any;
 
     private _actionBar: ActionBar;
-    private _cssAppliedVersion: number;
 
-    public _styleScope: StyleScope; // same as in ViewBase, but strongly typed
     public _modal: PageBase;
     public _fragmentTag: string;
     
@@ -50,8 +49,7 @@ export class PageBase extends ContentView implements PageDefinition {
     }
     set css(value: string) {
         this._styleScope.css = value;
-        this._cssFiles = {};
-        this._refreshCss();
+        this._onCssStateChange();
     }
 
     get actionBar(): ActionBar {
@@ -93,58 +91,14 @@ export class PageBase extends ContentView implements PageDefinition {
         return this;
     }
 
-    public onLoaded(): void {
-        this._refreshCss();
-        super.onLoaded();
-    }
-
-    public onUnloaded() {
-        const styleScope = this._styleScope;
-        super.onUnloaded();
-        this._styleScope = styleScope;
-    }
-
     public addCss(cssString: string): void {
-        this._addCssInternal(cssString);
+        this._styleScope.addCss(cssString);
+        this._onCssStateChange();
     }
 
-    private _addCssInternal(cssString: string, cssFileName?: string): void {
-        this._styleScope.addCss(cssString, cssFileName);
-        this._refreshCss();
-    }
-
-    private _cssFiles = {};
     public addCssFile(cssFileName: string) {
-        if (cssFileName.indexOf("~/") === 0) {
-            cssFileName = path.join(knownFolders.currentApp().path, cssFileName.replace("~/", ""));
-        }
-        if (!this._cssFiles[cssFileName]) {
-            if (File.exists(cssFileName)) {
-                const file = File.fromPath(cssFileName);
-                const text = file.readTextSync();
-                if (text) {
-                    this._addCssInternal(text, cssFileName);
-                    this._cssFiles[cssFileName] = true;
-                }
-            }
-        }
-    }
-
-    // Used in component-builder.ts
-    public _refreshCss(): void {
-        const scopeVersion = this._styleScope.ensureSelectors();
-        if (scopeVersion !== this._cssAppliedVersion) {
-            const styleScope = this._styleScope;
-            this._resetCssValues();
-            const checkSelectors = (view: View): boolean => {
-                styleScope.applySelectors(view);
-                return true;
-            };
-
-            checkSelectors(this);
-            eachDescendant(this, checkSelectors);
-            this._cssAppliedVersion = scopeVersion;
-        }
+        this._styleScope.addCssFile(cssFileName);
+        this._onCssStateChange();
     }
 
     public getKeyframeAnimationWithName(animationName: string): KeyframeAnimationInfo {
@@ -152,7 +106,8 @@ export class PageBase extends ContentView implements PageDefinition {
     }
 
     get frame(): Frame {
-        return <Frame>this.parent;
+        const frame = this.parent;
+        return frame instanceof Frame ? frame : undefined;
     }
 
     private createNavigatedData(eventName: string, isBackNavigation: boolean): NavigatedData {
@@ -164,6 +119,7 @@ export class PageBase extends ContentView implements PageDefinition {
         };
     }
 
+    @profile
     public onNavigatingTo(context: any, isBackNavigation: boolean, bindingContext?: any) {
         this._navigationContext = context;
 
@@ -174,14 +130,17 @@ export class PageBase extends ContentView implements PageDefinition {
         this.notify(this.createNavigatedData(PageBase.navigatingToEvent, isBackNavigation));
     }
 
+    @profile
     public onNavigatedTo(isBackNavigation: boolean) {
         this.notify(this.createNavigatedData(PageBase.navigatedToEvent, isBackNavigation));
     }
 
+    @profile
     public onNavigatingFrom(isBackNavigation: boolean) {
         this.notify(this.createNavigatedData(PageBase.navigatingFromEvent, isBackNavigation));
     }
 
+    @profile
     public onNavigatedFrom(isBackNavigation: boolean) {
         this.notify(this.createNavigatedData(PageBase.navigatedFromEvent, isBackNavigation));
 
@@ -268,10 +227,6 @@ export class PageBase extends ContentView implements PageDefinition {
         this.notify(args);
     }
 
-    public _getStyleScope(): StyleScope {
-        return this._styleScope;
-    }
-
     public eachChildView(callback: (child: View) => boolean) {
         super.eachChildView(callback);
         callback(this.actionBar);
@@ -281,16 +236,21 @@ export class PageBase extends ContentView implements PageDefinition {
         return (this.content ? 1 : 0) + (this.actionBar ? 1 : 0);
     }
 
-    private _resetCssValues() {
-        const resetCssValuesFunc = (view: View): boolean => {
-            view._cancelAllAnimations();
-            resetCSSProperties(view.style);
-            return true;
-        };
-
-        resetCssValuesFunc(this);
-        eachDescendant(this, resetCssValuesFunc);
+    _inheritStyleScope(styleScope: StyleScope): void {
+        // The Page have its own scope.
     }
+}
+
+PageBase.prototype.recycleNativeView = "never";
+
+export interface PageBase {
+    on(eventNames: string, callback: (data: EventData) => void, thisArg?: any): void;
+    on(event: "navigatingTo", callback: (args: NavigatedData) => void, thisArg?: any): void;
+    on(event: "navigatedTo", callback: (args: NavigatedData) => void, thisArg?: any): void;
+    on(event: "navigatingFrom", callback: (args: NavigatedData) => void, thisArg?: any): void;
+    on(event: "navigatedFrom", callback: (args: NavigatedData) => void, thisArg?: any): void;
+    on(event: "showingModally", callback: (args: ShownModallyData) => void, thisArg?: any): void;
+    on(event: "shownModally", callback: (args: ShownModallyData) => void, thisArg?: any);
 }
 
 /**
@@ -307,7 +267,7 @@ backgroundSpanUnderStatusBarProperty.register(PageBase);
 
 /**
  * Dependency property used to control if swipe back navigation in iOS is enabled.
- * This property is iOS sepecific. Default value: true
+ * This property is iOS specific. Default value: true
  */
 export const enableSwipeBackNavigationProperty = new Property<PageBase, boolean>({ name: "enableSwipeBackNavigation", defaultValue: true, valueConverter: booleanConverter });
 enableSwipeBackNavigationProperty.register(PageBase);

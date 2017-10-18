@@ -1,12 +1,13 @@
 import { View } from "../core/view";
-import { CacheLayerType, isDataURI, isFileOrResourcePath, layout, RESOURCE_PREFIX, FILE_PREFIX } from "../../utils/utils";
+import { isDataURI, isFileOrResourcePath, layout, RESOURCE_PREFIX, FILE_PREFIX } from "../../utils/utils";
 import { parse } from "../../css-value";
 import { path, knownFolders } from "../../file-system";
-import { android as androidApp } from "../../application";
+import * as application from "../../application";
+import { profile } from "tns-core-modules/profiling";
 export * from "./background-common"
 
 interface AndroidView {
-    background: android.graphics.drawable.Drawable.ConstantState;
+    _cachedDrawable: android.graphics.drawable.Drawable.ConstantState | android.graphics.drawable.Drawable;
 }
 
 // TODO: Change this implementation to use 
@@ -31,18 +32,18 @@ export module ad {
     }
 
     export function onBackgroundOrBorderPropertyChanged(view: View) {
-        const nativeView = <android.view.View>view.nativeView;
+        const nativeView = <android.view.View>view.nativeViewProtected;
         if (!nativeView) {
             return;
         }
 
         const background = view.style.backgroundInternal;
-        const cache = <CacheLayerType>view.nativeView;
         const drawable = nativeView.getBackground();
         const androidView = <any>view as AndroidView;
         // use undefined as not set. getBackground will never return undefined only Drawable or null;
-        if (androidView.background === undefined && drawable) {
-            androidView.background = drawable.getConstantState();
+        if (androidView._cachedDrawable === undefined && drawable) {
+            const constantState = drawable.getConstantState();
+            androidView._cachedDrawable = constantState || drawable;
         }
 
         if (isSetColorFilterOnlyWidget(nativeView)
@@ -66,26 +67,20 @@ export module ad {
             } else {
                 refreshBorderDrawable(view, backgroundDrawable);
             }
-
-            // This should be done only when backgroundImage is set!!!
-            if ((background.hasBorderWidth() || background.hasBorderRadius() || background.clipPath) && getSDK() < 18) {
-                // Switch to software because of unsupported canvas methods if hardware acceleration is on:
-                // http://developer.android.com/guide/topics/graphics/hardware-accel.html
-                if (cache.layerType === undefined) {
-                    cache.layerType = cache.getLayerType();
-                    cache.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null);
-                }
-            }
         } else {
-            // TODO: newDrawable for BitmapDrawable will fail if we don't speicfy resource. Use the other overload.
-            const defaultDrawable = androidView.background ? androidView.background.newDrawable() : null;
-            org.nativescript.widgets.ViewHelper.setBackground(nativeView, defaultDrawable);
-            androidView.background = undefined;
-            
-            if (cache.layerType !== undefined) {
-                cache.setLayerType(cache.layerType, null);
-                cache.layerType = undefined;
+            const cachedDrawable = androidView._cachedDrawable;
+            let defaultDrawable: android.graphics.drawable.Drawable;
+            if (cachedDrawable instanceof android.graphics.drawable.Drawable.ConstantState) {
+                defaultDrawable = cachedDrawable.newDrawable(nativeView.getResources())
+            } else if (cachedDrawable instanceof android.graphics.drawable.Drawable) {
+                defaultDrawable = cachedDrawable;
+            } else {
+                defaultDrawable = null;
             }
+
+            org.nativescript.widgets.ViewHelper.setBackground(nativeView, defaultDrawable);
+            // TODO: Do we need to clear the drawable here? Can't we just reuse it again?
+            androidView._cachedDrawable = undefined;
         }
 
         // TODO: Can we move BorderWidths as separate native setter?
@@ -111,7 +106,7 @@ function fromBase64(source: string): android.graphics.Bitmap {
 
 const pattern: RegExp = /url\(('|")(.*?)\1\)/;
 function refreshBorderDrawable(this: void, view: View, borderDrawable: org.nativescript.widgets.BorderDrawable) {
-    const nativeView = <android.view.View>view.nativeView;
+    const nativeView = <android.view.View>view.nativeViewProtected;
     const context = nativeView.getContext();
 
     const background = view.style.backgroundInternal;
@@ -228,16 +223,23 @@ export function initImageCache(context: android.content.Context, mode = CacheMod
     imageFetcher.initCache();
 }
 
-androidApp.on("activityStarted", (args) => {
+function onLivesync(args): void {
+    if (imageFetcher) {
+        imageFetcher.clearCache();
+    }
+}
+application.on("livesync", onLivesync);
+
+application.android.on("activityStarted", profile("initImageCache", args => {
     if (!imageFetcher) {
         initImageCache(args.activity);
     } else {
         imageFetcher.initCache();
     }
-});
+}));
 
-androidApp.on("activityStopped", (args) => {
+application.android.on("activityStopped", profile("closeImageCache", args => {
     if (imageFetcher) {
         imageFetcher.closeCache();
     }
-});
+}));

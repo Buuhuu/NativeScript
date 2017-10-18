@@ -1,4 +1,5 @@
 import { WebViewBase, knownFolders, traceWrite, traceEnabled, traceCategories, NavigationType } from "./web-view-common";
+import { profile } from "../../profiling";
 
 export * from "./web-view-common";
 
@@ -87,10 +88,11 @@ export class WebView extends WebViewBase {
     constructor() {
         super();
 
-        this.nativeView = this._ios = UIWebView.new();
+        this.nativeViewProtected = this._ios = UIWebView.new();
         this._delegate = UIWebViewDelegateImpl.initWithOwner(new WeakRef(this));
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
         this._ios.delegate = this._delegate;

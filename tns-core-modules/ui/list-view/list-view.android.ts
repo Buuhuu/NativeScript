@@ -6,6 +6,7 @@ import {
 import { StackLayout } from "../layouts/stack-layout";
 import { ProxyViewContainer } from "../proxy-view-container";
 import { LayoutBase } from "../layouts/layout-base";
+import { profile } from "../../profiling";
 
 export * from "./list-view-common";
 
@@ -42,13 +43,14 @@ function initializeItemClickListener(): void {
 }
 
 export class ListView extends ListViewBase {
-    nativeView: android.widget.ListView;
+    nativeViewProtected: android.widget.ListView;
 
     private _androidViewId: number = -1;
 
     public _realizedItems = new Map<android.view.View, View>();
     public _realizedTemplates = new Map<string, Map<android.view.View, View>>();
 
+    @profile
     public createNativeView() {
         initializeItemClickListener();
 
@@ -75,10 +77,10 @@ export class ListView extends ListViewBase {
 
     public initNativeView(): void {
         super.initNativeView();
-        const nativeView: any = this.nativeView;
+        const nativeView: any = this.nativeViewProtected;
         (<any>nativeView).itemClickListener.owner = this;
         const adapter = (<any>nativeView).adapter;
-        adapter.owner = this;       
+        adapter.owner = this;
         nativeView.setAdapter(adapter);
         if (this._androidViewId < 0) {
             this._androidViewId = android.view.View.generateViewId();
@@ -87,8 +89,8 @@ export class ListView extends ListViewBase {
     }
 
     public disposeNativeView() {
-        const nativeView = this.nativeView;
-         nativeView.setAdapter(null);
+        const nativeView = this.nativeViewProtected;
+        nativeView.setAdapter(null);
         (<any>nativeView).itemClickListener.owner = null;
         (<any>nativeView).adapter.owner = null;
         this.clearRealizedCells();
@@ -96,7 +98,7 @@ export class ListView extends ListViewBase {
     }
 
     public refresh() {
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         if (!nativeView || !nativeView.getAdapter()) {
             return;
         }
@@ -112,7 +114,7 @@ export class ListView extends ListViewBase {
     }
 
     public scrollToIndex(index: number) {
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         if (nativeView) {
             nativeView.setSelection(index);
         }
@@ -164,14 +166,14 @@ export class ListView extends ListViewBase {
     }
 
     [separatorColorProperty.getDefault](): { dividerHeight: number, divider: android.graphics.drawable.Drawable } {
-        let nativeView = this.nativeView;
+        let nativeView = this.nativeViewProtected;
         return {
             dividerHeight: nativeView.getDividerHeight(),
             divider: nativeView.getDivider()
         };
     }
     [separatorColorProperty.setNative](value: Color | { dividerHeight: number, divider: android.graphics.drawable.Drawable }) {
-        let nativeView = this.nativeView;
+        let nativeView = this.nativeViewProtected;
         if (value instanceof Color) {
             nativeView.setDivider(new android.graphics.drawable.ColorDrawable(value.android));
             nativeView.setDividerHeight(1);
@@ -190,7 +192,7 @@ export class ListView extends ListViewBase {
             this._itemTemplatesInternal = this._itemTemplatesInternal.concat(value);
         }
 
-        this.nativeView.setAdapter(new ListViewAdapterClass(this));
+        this.nativeViewProtected.setAdapter(new ListViewAdapterClass(this));
         this.refresh();
     }
 }
@@ -238,6 +240,7 @@ function ensureListViewAdapterClass() {
             return itemViewType;
         }
 
+        @profile
         public getView(index: number, convertView: android.view.View, parent: android.view.ViewGroup): android.view.View {
             //this.owner._dumpRealizedTemplates();
 
@@ -290,13 +293,13 @@ function ensureListViewAdapterClass() {
                     if (args.view instanceof LayoutBase &&
                         !(args.view instanceof ProxyViewContainer)) {
                         this.owner._addView(args.view);
-                        convertView = args.view.nativeView;
+                        convertView = args.view.nativeViewProtected;
                     } else {
                         let sp = new StackLayout();
                         sp.addChild(args.view);
                         this.owner._addView(sp);
 
-                        convertView = sp.nativeView;
+                        convertView = sp.nativeViewProtected;
                     }
                 }
 

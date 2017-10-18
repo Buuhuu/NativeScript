@@ -5,6 +5,7 @@ export * from "../text-base";
 
 export abstract class EditableTextBase extends TextBase implements EditableTextBaseDefinition {
     public static blurEvent = "blur";
+    public static focusEvent = "focus";
 
     public keyboardType: KeyboardType;
     public returnKeyType: ReturnKeyType;
@@ -13,6 +14,7 @@ export abstract class EditableTextBase extends TextBase implements EditableTextB
     public editable: boolean;
     public autocorrect: boolean;
     public hint: string;
+    public maxLength: number;
 
     public abstract dismissSoftInput();
     public abstract _setInputType(inputType: number): void;
@@ -50,3 +52,6 @@ autocorrectProperty.register(EditableTextBase);
 
 export const hintProperty = new Property<EditableTextBase, string>({ name: "hint", defaultValue: "" });
 hintProperty.register(EditableTextBase);
+
+export const maxLengthProperty = new Property<EditableTextBase, number>({ name: "maxLength", defaultValue: Number.POSITIVE_INFINITY, valueConverter: parseInt });
+maxLengthProperty.register(EditableTextBase);

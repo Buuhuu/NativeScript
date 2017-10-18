@@ -3,6 +3,7 @@ import { ActionBar } from "../action-bar";
 import { GridLayout } from "../layouts/grid-layout";
 import { DIALOG_FRAGMENT_TAG } from "./constants";
 import { device } from "../../platform";
+import { profile } from "../../profiling";
 
 export * from "./page-common";
 
@@ -39,13 +40,13 @@ function initializeDialogFragment() {
             this._owner.verticalAlignment = this._fullscreen ? "stretch" : "middle";
             this._owner.actionBarHidden = true;
 
-            const nativeView = <android.view.View>this._owner.nativeView;
+            const nativeView = <android.view.View>this._owner.nativeViewProtected;
             let layoutParams = nativeView.getLayoutParams();
             if (!layoutParams) {
                 layoutParams = new org.nativescript.widgets.CommonLayoutParams();
                 nativeView.setLayoutParams(layoutParams);
             }
-            dialog.setContentView(this._owner.nativeView, layoutParams);
+            dialog.setContentView(this._owner.nativeViewProtected, layoutParams);
 
             const window = dialog.getWindow();
             window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
@@ -87,7 +88,7 @@ function initializeDialogFragment() {
 }
 
 export class Page extends PageBase {
-    nativeView: org.nativescript.widgets.GridLayout;
+    nativeViewProtected: org.nativescript.widgets.GridLayout;
     private _isBackNavigation = false;
 
     public createNativeView() {
@@ -99,12 +100,12 @@ export class Page extends PageBase {
 
     public initNativeView(): void {
         super.initNativeView();
-        this.nativeView.setBackgroundColor(-1); // White color.
+        this.nativeViewProtected.setBackgroundColor(-1); // White color.
     }
 
     public _addViewToNativeVisualTree(child: View, atIndex?: number): boolean {
         // Set the row property for the child 
-        if (this.nativeView && child.nativeView) {
+        if (this.nativeViewProtected && child.nativeViewProtected) {
             if (child instanceof ActionBar) {
                 GridLayout.setRow(child, 0);
                 child.horizontalAlignment = "stretch";
@@ -118,25 +119,12 @@ export class Page extends PageBase {
         return super._addViewToNativeVisualTree(child, atIndex);
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
         if (this.actionBarHidden !== undefined) {
             this.updateActionBar();
         }
-    }
-
-    public _tearDownUI(force?: boolean) {
-        const skipDetached = !force && this.frame.android.cachePagesOnNavigate && !this._isBackNavigation;
-
-        if (!skipDetached) {
-            super._tearDownUI();
-            this._isAddedToNativeVisualTree = false;
-        }
-    }
-
-    public onNavigatedFrom(isBackNavigation: boolean) {
-        this._isBackNavigation = isBackNavigation;
-        super.onNavigatedFrom(isBackNavigation);
     }
 
     /* tslint:disable */

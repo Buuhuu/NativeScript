@@ -1,4 +1,5 @@
-﻿import { ItemEventData } from ".";
+﻿import { ScrollEventData } from "../scroll-view";
+import { ItemEventData } from ".";
 import {
     ListViewBase, View, KeyedTemplate, Length, Observable, Color,
     separatorColorProperty, itemTemplatesProperty, layout, EventData
@@ -6,6 +7,7 @@ import {
 import { StackLayout } from "../layouts/stack-layout";
 import { ProxyViewContainer } from "../proxy-view-container";
 import { ios } from "../../utils/utils";
+import { profile } from "../../profiling";
 
 export * from "./list-view-common";
 
@@ -185,6 +187,12 @@ class UITableViewRowHeightDelegateImpl extends NSObject implements UITableViewDe
         }
         return indexPath;
     }
+    
+    public tableViewDidSelectRowAtIndexPath(tableView: UITableView, indexPath: NSIndexPath): NSIndexPath {
+        tableView.deselectRowAtIndexPathAnimated(indexPath, true);
+
+        return indexPath;
+    }
 
     public tableViewHeightForRowAtIndexPath(tableView: UITableView, indexPath: NSIndexPath): number {
         let owner = this._owner.get();
@@ -208,7 +216,7 @@ export class ListView extends ListViewBase {
 
     constructor() {
         super();
-        this.nativeView = this._ios = UITableView.new();
+        this.nativeViewProtected = this._ios = UITableView.new();
         this._ios.registerClassForCellReuseIdentifier(ListViewCell.class(), this._defaultTemplate.key);
         this._ios.autoresizingMask = UIViewAutoresizing.None;
         this._ios.estimatedRowHeight = DEFAULT_HEIGHT;
@@ -225,6 +233,7 @@ export class ListView extends ListViewBase {
         this._ios.clipsToBounds = true;
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
         if (this._isDataDirty) {
@@ -359,15 +368,15 @@ export class ListView extends ListViewBase {
                 cell.owner = new WeakRef(view);
             } else if (cell.view !== view) {
                 this._removeContainer(cell);
-                (<UIView>cell.view.nativeView).removeFromSuperview();
+                (<UIView>cell.view.nativeViewProtected).removeFromSuperview();
                 cell.owner = new WeakRef(view);
             }
 
             this._prepareItem(view, indexPath.row);
             this._map.set(cell, view);
             // We expect that views returned from itemLoading are new (e.g. not reused).
-            if (view && !view.parent && view.nativeView) {
-                cell.contentView.addSubview(view.nativeView);
+            if (view && !view.parent && view.nativeViewProtected) {
+                cell.contentView.addSubview(view.nativeViewProtected);
                 this._addView(view);
             }
 

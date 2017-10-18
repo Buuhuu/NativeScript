@@ -3,17 +3,18 @@
     paddingLeftProperty, paddingTopProperty, paddingRightProperty, paddingBottomProperty,
     Length, zIndexProperty, textAlignmentProperty, TextAlignment
 } from "./button-common";
-
+import { profile } from "../../profiling";
 import { TouchGestureEventData, GestureTypes, TouchAction } from "../gestures";
 
 export * from "./button-common";
 
 interface ClickListener {
-    new (owner: Button): android.view.View.OnClickListener;
+    new(owner: Button): android.view.View.OnClickListener;
 }
 
 let ClickListener: ClickListener;
 let APILEVEL: number;
+let AndroidButton: typeof android.widget.Button;
 
 function initializeClickListener(): void {
     if (ClickListener) {
@@ -28,22 +29,28 @@ function initializeClickListener(): void {
         }
 
         public onClick(v: android.view.View): void {
-            this.owner._emit(ButtonBase.tapEvent);
+            const owner = this.owner;
+            if (owner) {
+                owner._emit(ButtonBase.tapEvent);
+            }
         }
     }
 
     ClickListener = ClickListenerImpl;
     APILEVEL = android.os.Build.VERSION.SDK_INT;
+    AndroidButton = android.widget.Button;
 }
 
 export class Button extends ButtonBase {
-    nativeView: android.widget.Button;
+    nativeViewProtected: android.widget.Button;
 
+    private _stateListAnimator: any;
     private _highlightedHandler: (args: TouchGestureEventData) => void;
 
+    @profile
     public createNativeView() {
         initializeClickListener();
-        const button = new android.widget.Button(this._context);
+        const button = new AndroidButton(this._context);
         const clickListener = new ClickListener(this);
         button.setOnClickListener(clickListener);
         (<any>button).clickListener = clickListener;
@@ -51,13 +58,23 @@ export class Button extends ButtonBase {
     }
 
     public initNativeView(): void {
-        (<any>this.nativeView).clickListener.owner = this;
+        const nativeView = this.nativeViewProtected;
+        (<any>nativeView).clickListener.owner = this;
         super.initNativeView();
     }
 
     public disposeNativeView() {
-        (<any>this.nativeView).clickListener.owner = null;
+        (<any>this.nativeViewProtected).clickListener.owner = null;
         super.disposeNativeView();
+    }
+
+    public resetNativeView(): void {
+        super.resetNativeView();
+
+        if (this._stateListAnimator && APILEVEL >= 21) {
+            (<any>this.nativeViewProtected).setStateListAnimator(this._stateListAnimator);
+            this._stateListAnimator = undefined;
+        }
     }
 
     @PseudoClassHandler("normal", "highlighted", "pressed", "active")
@@ -83,39 +100,41 @@ export class Button extends ButtonBase {
         return { value: this._defaultPaddingTop, unit: "px" }
     }
     [paddingTopProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingTop(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderTopWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingTop(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderTopWidth, 0));
     }
 
     [paddingRightProperty.getDefault](): Length {
         return { value: this._defaultPaddingRight, unit: "px" }
     }
     [paddingRightProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingRight(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderRightWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingRight(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderRightWidth, 0));
     }
 
     [paddingBottomProperty.getDefault](): Length {
         return { value: this._defaultPaddingBottom, unit: "px" }
     }
     [paddingBottomProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingBottom(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderBottomWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingBottom(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderBottomWidth, 0));
     }
 
     [paddingLeftProperty.getDefault](): Length {
         return { value: this._defaultPaddingLeft, unit: "px" }
     }
     [paddingLeftProperty.setNative](value: Length) {
-        org.nativescript.widgets.ViewHelper.setPaddingLeft(this.nativeView, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderLeftWidth, 0));
+        org.nativescript.widgets.ViewHelper.setPaddingLeft(this.nativeViewProtected, Length.toDevicePixels(value, 0) + Length.toDevicePixels(this.style.borderLeftWidth, 0));
     }
 
-    [zIndexProperty.getDefault](): number {
-        return org.nativescript.widgets.ViewHelper.getZIndex(this.nativeView);
-    }
     [zIndexProperty.setNative](value: number) {
-        org.nativescript.widgets.ViewHelper.setZIndex(this.nativeView, value);
         // API >= 21
         if (APILEVEL >= 21) {
-            (<any>this.nativeView).setStateListAnimator(null);
+            const nativeView = this.nativeViewProtected;
+            if (!this._stateListAnimator) {
+                this._stateListAnimator = (<any>nativeView).getStateListAnimator();
+            }
+            (<any>nativeView).setStateListAnimator(null);
         }
+
+        org.nativescript.widgets.ViewHelper.setZIndex(this.nativeViewProtected, value);
     }
 
     [textAlignmentProperty.setNative](value: TextAlignment) {

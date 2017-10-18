@@ -3,12 +3,12 @@
 import {
     TabViewBase, TabViewItemBase, itemsProperty, selectedIndexProperty,
     tabTextColorProperty, tabBackgroundColorProperty, selectedTabTextColorProperty, iosIconRenderingModeProperty,
-    View, fontInternalProperty, layout, traceEnabled, traceWrite, traceCategories, Color, initNativeView
+    View, fontInternalProperty, layout, traceEnabled, traceWrite, traceCategories, Color
 } from "./tab-view-common"
-
 import { textTransformProperty, TextTransform, getTransformedText } from "../text-base";
 import { fromFileOrResource } from "../../image-source";
 import { Page } from "../page";
+import { profile } from "../../profiling";
 
 export * from "./tab-view-common";
 
@@ -120,7 +120,7 @@ function updateItemTitlePosition(tabBarItem: UITabBarItem): void {
 }
 
 function updateItemIconPosition(tabBarItem: UITabBarItem): void {
-    tabBarItem.imageInsets = new UIEdgeInsets({top: 6, left: 0, bottom: -6, right: 0});
+    tabBarItem.imageInsets = new UIEdgeInsets({ top: 6, left: 0, bottom: -6, right: 0 });
 }
 
 export class TabViewItem extends TabViewItemBase {
@@ -128,13 +128,12 @@ export class TabViewItem extends TabViewItemBase {
 
     public setViewController(controller: UIViewController) {
         this._iosViewController = controller;
-        (<any>this)._nativeView = this.nativeView = controller.view;
-        initNativeView(this);
+        this.setNativeView((<any>this)._nativeView = controller.view);
     }
-    
+
     public disposeNativeView() {
         this._iosViewController = undefined;
-        this.nativeView = undefined;
+        this.setNativeView(undefined);
     }
 
     public _update() {
@@ -178,12 +177,13 @@ export class TabView extends TabViewBase {
         super();
 
         this._ios = UITabBarControllerImpl.initWithOwner(new WeakRef(this));
-        this.nativeView = this._ios.view;
+        this.nativeViewProtected = this._ios.view;
         this._delegate = UITabBarControllerDelegateImpl.initWithOwner(new WeakRef(this));
         this._moreNavigationControllerDelegate = UINavigationControllerDelegateImpl.initWithOwner(new WeakRef(this));
         //This delegate is set on the last line of _addTabs method.
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
         this._ios.delegate = this._delegate;
@@ -327,7 +327,7 @@ export class TabView extends TabViewBase {
     }
 
     public onMeasure(widthMeasureSpec: number, heightMeasureSpec: number): void {
-        const nativeView = this.nativeView;
+        const nativeView = this.nativeViewProtected;
         if (nativeView) {
 
             const width = layout.getMeasureSpecSize(widthMeasureSpec);
@@ -462,20 +462,18 @@ function getTitleAttributesForStates(tabView: TabView): TabStates {
     const result: TabStates = {};
 
     const font = tabView.style.fontInternal.getUIFont(UIFont.systemFontOfSize(10));
-    let tabItemTextColor = tabView.style.tabTextColor;
-    if (tabItemTextColor instanceof Color) {
-        result.normalState = {
-            [UITextAttributeTextColor]: tabItemTextColor.ios,
-            [NSFontAttributeName]: font
-        }
+    const tabItemTextColor = tabView.style.tabTextColor;
+    const textColor = tabItemTextColor instanceof Color ? tabItemTextColor.ios : null;
+    result.normalState = { [NSFontAttributeName]: font }
+    if (textColor) {
+        result.normalState[UITextAttributeTextColor] = textColor
     }
 
     const tabSelectedItemTextColor = tabView.style.selectedTabTextColor;
-    if (tabSelectedItemTextColor instanceof Color) {
-        result.selectedState = {
-            [UITextAttributeTextColor]: tabSelectedItemTextColor.ios,
-            [NSFontAttributeName]: font
-        }
+    const selectedTextColor = tabItemTextColor instanceof Color ? tabSelectedItemTextColor.ios : null;
+    result.selectedState = { [NSFontAttributeName]: font }
+    if (selectedTextColor) {
+        result.selectedState[UITextAttributeTextColor] = selectedTextColor
     }
 
     return result;

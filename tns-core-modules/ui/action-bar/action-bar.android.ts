@@ -1,5 +1,5 @@
 import { AndroidActionBarSettings as AndroidActionBarSettingsDefinition, AndroidActionItemSettings } from ".";
-import { ActionItemBase, ActionBarBase, isVisible, View, colorProperty, Color } from "./action-bar-common";
+import { ActionItemBase, ActionBarBase, isVisible, View, layout, colorProperty, flatProperty, Color } from "./action-bar-common";
 import { RESOURCE_PREFIX } from "../../utils/utils";
 import { fromFileOrResource } from "../../image-source";
 import * as application from "../../application";
@@ -8,7 +8,9 @@ export * from "./action-bar-common";
 
 const R_ID_HOME = 0x0102002c;
 const ACTION_ITEM_ID_OFFSET = 10000;
+const DEFAULT_ELEVATION = 4;
 
+let AppCompatTextView;
 let actionItemIdGenerator = ACTION_ITEM_ID_OFFSET;
 function generateItemId(): number {
     actionItemIdGenerator++;
@@ -26,6 +28,8 @@ function initializeMenuItemClickListener(): void {
     if (MenuItemClickListener) {
         return;
     }
+
+    AppCompatTextView = (<any>android).support.v7.widget.AppCompatTextView;
 
     @Interfaces([android.support.v7.widget.Toolbar.OnMenuItemClickListener])
     class MenuItemClickListenerImpl extends java.lang.Object implements android.support.v7.widget.Toolbar.OnMenuItemClickListener {
@@ -104,7 +108,7 @@ export class NavigationButton extends ActionItem {
 
 export class ActionBar extends ActionBarBase {
     private _android: AndroidActionBarSettings;
-    public nativeView: android.support.v7.widget.Toolbar;
+    public nativeViewProtected: android.support.v7.widget.Toolbar;
 
     constructor() {
         super();
@@ -138,11 +142,11 @@ export class ActionBar extends ActionBarBase {
 
     public initNativeView(): void {
         super.initNativeView();
-        (<any>this.nativeView).menuItemClickListener.owner = this;
+        (<any>this.nativeViewProtected).menuItemClickListener.owner = this;
     }
 
     public disposeNativeView() {
-        (<any>this.nativeView).menuItemClickListener.owner = null;
+        (<any>this.nativeViewProtected).menuItemClickListener.owner = null;
         super.disposeNativeView();
     }
 
@@ -152,19 +156,19 @@ export class ActionBar extends ActionBarBase {
     }
 
     public update() {
-        if (!this.nativeView) {
+        if (!this.nativeViewProtected) {
             return;
         }
 
         const page = this.page;
         if (!page.frame || !page.frame._getNavBarVisible(page)) {
-            this.nativeView.setVisibility(android.view.View.GONE);
+            this.nativeViewProtected.setVisibility(android.view.View.GONE);
 
             // If action bar is hidden - no need to fill it with items.
             return;
         }
 
-        this.nativeView.setVisibility(android.view.View.VISIBLE);
+        this.nativeViewProtected.setVisibility(android.view.View.VISIBLE);
 
         // Add menu items
         this._addActionItems();
@@ -212,16 +216,16 @@ export class ActionBar extends ActionBarBase {
                 // Try to look in the system resources.
                 const systemResourceId = getSystemResourceId(systemIcon);
                 if (systemResourceId) {
-                    this.nativeView.setNavigationIcon(systemResourceId);
+                    this.nativeViewProtected.setNavigationIcon(systemResourceId);
                 }
             }
             else if (navButton.icon) {
                 let drawableOrId = getDrawableOrResourceId(navButton.icon, appResources);
-                this.nativeView.setNavigationIcon(drawableOrId);
+                this.nativeViewProtected.setNavigationIcon(drawableOrId);
             }
 
             let navBtn = new WeakRef(navButton);
-            this.nativeView.setNavigationOnClickListener(new android.view.View.OnClickListener({
+            this.nativeViewProtected.setNavigationOnClickListener(new android.view.View.OnClickListener({
                 onClick: function (v) {
                     let owner = navBtn.get();
                     if (owner) {
@@ -231,7 +235,7 @@ export class ActionBar extends ActionBarBase {
             }));
         }
         else {
-            this.nativeView.setNavigationIcon(null);
+            this.nativeViewProtected.setNavigationIcon(null);
         }
     }
 
@@ -242,16 +246,16 @@ export class ActionBar extends ActionBarBase {
             if (icon !== undefined) {
                 let drawableOrId = getDrawableOrResourceId(icon, appResources);
                 if (drawableOrId) {
-                    this.nativeView.setLogo(drawableOrId);
+                    this.nativeViewProtected.setLogo(drawableOrId);
                 }
             }
             else {
                 let defaultIcon = application.android.nativeApp.getApplicationInfo().icon;
-                this.nativeView.setLogo(defaultIcon);
+                this.nativeViewProtected.setLogo(defaultIcon);
             }
         }
         else {
-            this.nativeView.setLogo(null);
+            this.nativeViewProtected.setLogo(null);
         }
     }
 
@@ -260,20 +264,20 @@ export class ActionBar extends ActionBarBase {
             // No title view - show the title
             let title = this.title;
             if (title !== undefined) {
-                this.nativeView.setTitle(title);
+                this.nativeViewProtected.setTitle(title);
             } else {
                 let appContext = application.android.context;
                 let appInfo = appContext.getApplicationInfo();
                 let appLabel = appContext.getPackageManager().getApplicationLabel(appInfo);
                 if (appLabel) {
-                    this.nativeView.setTitle(appLabel);
+                    this.nativeViewProtected.setTitle(appLabel);
                 }
             }
         }
     }
 
     public _addActionItems() {
-        let menu = this.nativeView.getMenu();
+        let menu = this.nativeViewProtected.getMenu();
         let items = this.actionItems.getVisibleItems();
 
         menu.clear();
@@ -310,21 +314,25 @@ export class ActionBar extends ActionBarBase {
     }
 
     private static _setOnClickListener(item: ActionItem): void {
+        const weakRef = new WeakRef(item);
         item.actionView.android.setOnClickListener(new android.view.View.OnClickListener({
             onClick: function (v: android.view.View) {
-                item._raiseTap();
+                const owner = weakRef.get();
+                if (owner) {
+                    owner._raiseTap();
+                }
             }
         }));
     }
 
     public _onTitlePropertyChanged() {
-        if (this.nativeView) {
+        if (this.nativeViewProtected) {
             this._updateTitleAndTitleView();
         }
     }
 
     public _onIconPropertyChanged() {
-        if (this.nativeView) {
+        if (this.nativeViewProtected) {
             this._updateIcon();
         }
     }
@@ -332,12 +340,12 @@ export class ActionBar extends ActionBarBase {
     public _addViewToNativeVisualTree(child: View, atIndex: number = Number.MAX_VALUE): boolean {
         super._addViewToNativeVisualTree(child);
 
-        if (this.nativeView && child.nativeView) {
-            if (atIndex >= this.nativeView.getChildCount()) {
-                this.nativeView.addView(child.nativeView);
+        if (this.nativeViewProtected && child.nativeViewProtected) {
+            if (atIndex >= this.nativeViewProtected.getChildCount()) {
+                this.nativeViewProtected.addView(child.nativeViewProtected);
             }
             else {
-                this.nativeView.addView(child.nativeView, atIndex);
+                this.nativeViewProtected.addView(child.nativeViewProtected, atIndex);
             }
             return true;
         }
@@ -348,26 +356,63 @@ export class ActionBar extends ActionBarBase {
     public _removeViewFromNativeVisualTree(child: View): void {
         super._removeViewFromNativeVisualTree(child);
 
-        if (this.nativeView && child.nativeView) {
-            this.nativeView.removeView(child.nativeView);
+        if (this.nativeViewProtected && child.nativeViewProtected) {
+            this.nativeViewProtected.removeView(child.nativeViewProtected);
         }
     }
 
     [colorProperty.getDefault](): number {
+        const nativeView = this.nativeViewProtected;
         if (!defaultTitleTextColor) {
-            let textView = new android.widget.TextView(this._context);
-            defaultTitleTextColor = textView.getTextColors().getDefaultColor();
+            let tv: android.widget.TextView = getAppCompatTextView(nativeView);
+            if (!tv) {
+                const title = nativeView.getTitle();
+                // setTitle will create AppCompatTextView internally;
+                nativeView.setTitle("");
+                tv = getAppCompatTextView(nativeView);
+                if (title) {
+                    // restore title.
+                    nativeView.setTitle(title);
+                }
+            }
+
+            // Fallback to hardcoded falue if we don't find TextView instance...
+            // using new TextView().getTextColors().getDefaultColor() returns different value: -1979711488 
+            defaultTitleTextColor = tv ? tv.getTextColors().getDefaultColor() : -570425344;
         }
 
         return defaultTitleTextColor;
     }
     [colorProperty.setNative](value: number | Color) {
-        let color = value instanceof Color ? value.android : value;
-        this.nativeView.setTitleTextColor(color);
+        const color = value instanceof Color ? value.android : value;
+        this.nativeViewProtected.setTitleTextColor(color);
+    }
+
+    [flatProperty.setNative](value: boolean) {
+        const compat = <any>android.support.v4.view.ViewCompat;
+        if (compat.setElevation) {
+            if (value) {
+                compat.setElevation(this.nativeViewProtected, 0);
+            } else {
+                const val = DEFAULT_ELEVATION * layout.getDisplayDensity();
+                compat.setElevation(this.nativeViewProtected, val);
+            }
+        }
     }
 }
 
-// ActionBar.prototype.recycleNativeView = true;
+function getAppCompatTextView(toolbar: android.support.v7.widget.Toolbar): typeof AppCompatTextView {
+    for (let i = 0, count = toolbar.getChildCount(); i < count; i++) {
+        const child = toolbar.getChildAt(i);
+        if (child instanceof AppCompatTextView) {
+            return child;
+        }
+    }
+
+    return null;
+}
+
+ActionBar.prototype.recycleNativeView = "auto";
 
 let defaultTitleTextColor: number;
 

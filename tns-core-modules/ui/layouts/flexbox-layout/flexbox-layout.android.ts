@@ -16,8 +16,8 @@ let widgetFlexboxLayout: typeof org.nativescript.widgets.FlexboxLayout;
 let widgetLayoutParams: typeof org.nativescript.widgets.FlexboxLayout.LayoutParams;
 
 function makeNativeSetter<T>(setter: (lp: org.nativescript.widgets.FlexboxLayout.LayoutParams, value: T) => void) {
-    return function(this: View, value: T) {
-        const nativeView: android.view.View = this.nativeView;
+    return function (this: View, value: T) {
+        const nativeView: android.view.View = this.nativeViewProtected;
         const lp = nativeView.getLayoutParams() || new widgetLayoutParams();
         if (lp instanceof widgetLayoutParams) {
             setter(lp, value);
@@ -80,72 +80,76 @@ const alignSelfMap = {
 }
 
 export class FlexboxLayout extends FlexboxLayoutBase {
-    nativeView: org.nativescript.widgets.FlexboxLayout;
+    nativeViewProtected: org.nativescript.widgets.FlexboxLayout;
 
-    public createNativeView() {
+    constructor() {
+        super();
         if (!widgetFlexboxLayout) {
             widgetFlexboxLayout = org.nativescript.widgets.FlexboxLayout;
             widgetLayoutParams = widgetFlexboxLayout.LayoutParams;
         }
+    }
+    
+    public createNativeView() {
         return new widgetFlexboxLayout(this._context);
     }
 
-    public disposeNativeView() {
-        (<any>this.nativeView).invalidateOrdersCache();
-        super.disposeNativeView();
+    public resetNativeView(): void {
+        super.resetNativeView();
+        (<any>this.nativeViewProtected).invalidateOrdersCache();   
     }
 
     [flexDirectionProperty.getDefault](): FlexDirection {
         return flexDirectionProperty.defaultValue;
     }
     [flexDirectionProperty.setNative](flexDirection: FlexDirection) {
-        this.nativeView.setFlexDirection(flexDirectionMap[flexDirection]);
+        this.nativeViewProtected.setFlexDirection(flexDirectionMap[flexDirection]);
     }
 
     [flexWrapProperty.getDefault](): FlexWrap {
         return flexWrapProperty.defaultValue;
     }
     [flexWrapProperty.setNative](flexWrap: FlexWrap) {
-        this.nativeView.setFlexWrap(flexWrapMap[flexWrap]);
+        this.nativeViewProtected.setFlexWrap(flexWrapMap[flexWrap]);
     }
 
     [justifyContentProperty.getDefault](): JustifyContent {
         return justifyContentProperty.defaultValue;
     }
     [justifyContentProperty.setNative](justifyContent: JustifyContent) {
-        this.nativeView.setJustifyContent(justifyContentMap[justifyContent]);
+        this.nativeViewProtected.setJustifyContent(justifyContentMap[justifyContent]);
     }
 
     [alignItemsProperty.getDefault](): AlignItems {
         return alignItemsProperty.defaultValue;
     }
     [alignItemsProperty.setNative](alignItems: AlignItems) {
-        this.nativeView.setAlignItems(alignItemsMap[alignItems]);
+        this.nativeViewProtected.setAlignItems(alignItemsMap[alignItems]);
     }
 
     [alignContentProperty.getDefault](): AlignContent {
         return alignContentProperty.defaultValue;
     }
     [alignContentProperty.setNative](alignContent: AlignContent) {
-        this.nativeView.setAlignContent(alignContentMap[alignContent]);
+        this.nativeViewProtected.setAlignContent(alignContentMap[alignContent]);
     }
 
     public _updateNativeLayoutParams(child: View): void {
         super._updateNativeLayoutParams(child);
 
-        const lp = <org.nativescript.widgets.FlexboxLayout.LayoutParams>child.nativeView.getLayoutParams();
+        const lp = <org.nativescript.widgets.FlexboxLayout.LayoutParams>child.nativeViewProtected.getLayoutParams();
         const style = child.style;
         lp.order = style.order;
         lp.flexGrow = style.flexGrow;
         lp.flexShrink = style.flexShrink;
         lp.wrapBefore = style.flexWrapBefore;
         lp.alignSelf = alignSelfMap[style.alignSelf];
-        child.nativeView.setLayoutParams(lp);
+        child.nativeViewProtected.setLayoutParams(lp);
     }
 
     public _setChildMinWidthNative(child: View): void {
         child._setMinWidthNative(0);
-        const nativeView = child.nativeView;
+        const nativeView = child.nativeViewProtected;
         const lp = nativeView.getLayoutParams();
         if (lp instanceof widgetLayoutParams) {
             lp.minWidth = Length.toDevicePixels(child.style.minWidth, 0);
@@ -155,7 +159,7 @@ export class FlexboxLayout extends FlexboxLayoutBase {
 
     public _setChildMinHeightNative(child: View): void {
         child._setMinHeightNative(0);
-        const nativeView = child.nativeView;
+        const nativeView = child.nativeViewProtected;
         const lp = nativeView.getLayoutParams();
         if (lp instanceof widgetLayoutParams) {
             lp.minHeight = Length.toDevicePixels(child.style.minHeight, 0);

@@ -24,6 +24,10 @@ function _createItems(count: number): Array<number> {
     return items;
 }
 
+export function test_recycling() {
+    helper.nativeView_recycling_test(() => new listPickerModule.ListPicker());
+}
+
 export var testWhenlistPickerIsCreatedItemsAreUndefined = function () {
     helper.buildUIAndRunTest(_createListPicker(), function (views: Array<viewModule.View>) {
         var listPicker = <listPickerModule.ListPicker>views[0];
@@ -182,7 +186,7 @@ export var test_Android_MaxValueIsOneLessThanItemsCount = function () {
         var listPicker = <listPickerModule.ListPicker>views[0];
         listPicker.items = ["One", "Two", "Three"];
         var expectedValue = listPicker.items.length - 1;
-        var actualValue = listPicker.nativeView.getMaxValue();
+        var actualValue = listPicker.nativeViewProtected.getMaxValue();
         TKUnit.assertEqual(actualValue, expectedValue);
     });
 }
@@ -195,7 +199,7 @@ export var test_Android_WhenItemsAreEmptyNativeControlDoesNotShowZero = function
     helper.buildUIAndRunTest(_createListPicker(), function (views: Array<viewModule.View>) {
         var listPicker = <listPickerModule.ListPicker>views[0];
         var expectedValue = " ";
-        var actualValue = listPicker.nativeView.editText.getText().toString();
+        var actualValue = listPicker.nativeViewProtected.editText.getText().toString();
         TKUnit.assertEqual(actualValue, expectedValue);
     });
 }
@@ -209,7 +213,7 @@ export var test_Android_WhenBoundToSingleElementArrayEditTextIsUpdatedProperly =
         var listPicker = <listPickerModule.ListPicker>views[0];
         listPicker.items = ["One"];
         var expectedValue = "One";
-        var actualValue = listPicker.nativeView.editText.getText().toString();
+        var actualValue = listPicker.nativeViewProtected.editText.getText().toString();
         TKUnit.assertEqual(actualValue, expectedValue);
     });
 }
@@ -224,7 +228,7 @@ export var test_Android_WhenSelectedIndexChangesEditTextIsUpdatedProperly = func
         listPicker.items = ["One", "Two"];
         listPicker.selectedIndex = 1;
         var expectedValue = "Two";
-        var actualValue = listPicker.nativeView.editText.getText().toString();
+        var actualValue = listPicker.nativeViewProtected.editText.getText().toString();
         TKUnit.assertEqual(actualValue, expectedValue);
     });
 }

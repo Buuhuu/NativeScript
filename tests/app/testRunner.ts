@@ -29,7 +29,10 @@ export function isRunningOnEmulator(): boolean {
     }
 }
 
-export var allTests = {};
+export const allTests = {};
+
+import * as domNodeTest from "./debugger/dom-node-tests";
+allTests["DOM-NODE"] = domNodeTest;
 
 import * as profilingTests from "./profiling/profiling-tests";
 allTests["PROFILING"] = profilingTests;
@@ -214,29 +217,32 @@ allTests["HTML-VIEW"] = htmlViewTests;
 import * as repeaterTests from "./ui/repeater/repeater-tests";
 allTests["REPEATER"] = repeaterTests;
 
-import * as searchBarTests from "./ui/search-bar/search-bar-tests";
-allTests["SEARCH-BAR"] = searchBarTests;
-
 import * as segmentedBarTests from "./ui/segmented-bar/segmented-bar-tests";
 allTests["SEGMENTED-BAR"] = segmentedBarTests;
 
 import * as animationTests from "./ui/animation/animation-tests";
 allTests["ANIMATION"] = animationTests;
 
+import * as lifecycle from "./ui/lifecycle/lifecycle-tests";
+allTests["LIFECYCLE"] = lifecycle;
+
+
 import * as cssAnimationTests from "./ui/animation/css-animation-tests";
 allTests["CSS-ANIMATION"] = cssAnimationTests;
 
 import * as transitionTests from "./navigation/transition-tests";
-// Skip transitions on android emulators with API 23
-if (!(platform.device.os === platform.platformNames.android && parseInt(platform.device.sdkVersion) === 23 && isRunningOnEmulator())) {
-    allTests["TANSITIONS"] = transitionTests;
-}
+allTests["TANSITIONS"] = transitionTests;
+import * as searchBarTests from "./ui/search-bar/search-bar-tests";
+allTests["SEARCH-BAR"] = searchBarTests;
 
 import * as navigationTests from "./navigation/navigation-tests";
 allTests["NAVIGATION"] = navigationTests;
 
-var testsWithLongDelay = {
-    test_Transitions: 3 * 60 * 1000,
+const testsSuitesWithLongDelay = {
+    HTTP: 15 * 1000,
+}
+
+const testsWithLongDelay = {
     testLocation: 10000,
     testLocationOnce: 10000,
     testLocationOnceMaximumAge: 10000,
@@ -251,39 +257,27 @@ var testsWithLongDelay = {
     test_AnimateBackgroundColor_FromString: 10 * 1000
 }
 
-var startTime;
-var running = false;
-var testsQueue = new Array<TestInfo>();
+let startTime;
+let running = false;
+let testsQueue = new Array<TestInfo>();
 
 function printRunTestStats() {
-    let testFileContent = new Array<string>();
     const testCases = new Array<string>();
 
-    var failedTestCount = 0;
-    var failedTestInfo = [];
+    let failedTestCount = 0;
+    const failedTestInfo = [];
     const slowTests = new Array<string>();
 
     let allTests = testsQueue.filter(t => t.isTest);
 
-    testFileContent.push("<testsuites>");
-
     allTests.forEach((testCase, i, arr) => {
         let testName = testCase.testName;
-        let duration = (testCase.duration / 1000).toFixed(2);
-
         if (!testCase.isPassed) {
             failedTestCount++;
-
-            let errorMessage = testCase.errorMessage;
-
             failedTestInfo.push(testCase.testName + " FAILED: " + testCase.errorMessage);
-
-            testCases.push(`<testcase classname="${platform.device.os}" name="${testName}" time="${duration}"><failure type="exceptions.AssertionError"><![CDATA[${errorMessage}]]></failure></testcase>`);
-
-        } else {
-            testCases.push(`<testcase classname="${platform.device.os}" name="${testName}" time="${duration}"></testcase>`);
         }
 
+        let duration = (testCase.duration / 1000).toFixed(2);
         if (testCase.duration > 500) {
             slowTests.push(`${testCase.testName}: ${duration}s`);
         }
@@ -291,13 +285,11 @@ function printRunTestStats() {
 
     const totalTime = (TKUnit.time() - startTime).toFixed(2);
 
-    testFileContent.push(`<testsuite name="NativeScript Tests" timestamp="${new Date()}" hostname="hostname" time="${totalTime}" errors="0" tests="${allTests.length}" skipped="0" failures="${failedTestCount}">`);
-
-    testFileContent = testFileContent.concat(testCases);
-
-    let finalMessage = `\n=== ALL TESTS COMPLETE ===\n` +
+    let finalMessage = `\n` +
+        `=== ALL TESTS COMPLETE ===\n` +
         `${(allTests.length - failedTestCount)} OK, ${failedTestCount} failed\n` +
         `DURATION: ${totalTime} ms\n`;
+
     TKUnit.write(finalMessage, messageType.info);
 
     failedTestInfo.forEach((message, i, arr) => {
@@ -305,40 +297,55 @@ function printRunTestStats() {
         finalMessage += "\n" + message;
     });
 
+    // console.log("test-result.xml:\n" + generateTestFile(allTests));
+
     // DO NOT CHANGE THE FIRST ROW! Used as an indicator for test run pass detection.
     TKUnit.write(`Tests EOF!`, messageType.info);
 
-    testFileContent.push("</testsuite>");
-    testFileContent.push("</testsuites>");
+    showReportPage(finalMessage);
+}
 
-    let testFilePath: string;
-    let testResultsFileName = "test-results.xml";
-    if (platform.isIOS) {
-        testFilePath = fs.path.join(fs.knownFolders.documents().path, testResultsFileName);
-    } else {
-        testFilePath = fs.path.join(android.os.Environment.getExternalStorageDirectory().getAbsolutePath(), "Documents", testResultsFileName);
-    }
+function generateTestFile(allTests: TestInfo[]) {
+    let failedTestCount = 0;
 
-    let testFile = fs.File.fromPath(testFilePath);
-    testFile.writeTextSync(testFileContent.join(""));
+    const testCases = new Array<string>();
+    allTests.forEach((testCase, i, arr) => {
+        let testName = testCase.testName;
+        let duration = (testCase.duration / 1000).toFixed(2);
 
-    finalMessage += "\n" + "Test results: " + testFilePath;
-    // finalMessage += "\n" + "----------------- ";
-    // finalMessage += "\n" + "Slow tests: ";
-    // slowTests.forEach((message, i, arr) => {
-    //     TKUnit.write(message, messageType.error);
-    //     finalMessage += "\n" + message;
-    // });
+        testCases.push(`<testcase classname="${platform.device.os}" name="${testName}" time="${duration}">`)
+        if (!testCase.isPassed) {
+            failedTestCount++;
+            testCases.push(`<failure type="exceptions.AssertionError"><![CDATA[${testCase.errorMessage}]]></failure>`)
+        }
+        testCases.push(`</testcase>`);
+    });
 
-    let stack = new StackLayout();
-    let btn = new Button();
+    const totalTime = (TKUnit.time() - startTime).toFixed(2);
+
+    const result = [
+        "<testsuites>",
+        `<testsuite name="NativeScript Tests" timestamp="${new Date()}" hostname="hostname" time="${totalTime}" errors="0" tests="${allTests.length}" skipped="0" failures="${failedTestCount}">`,
+        ...testCases,
+        "</testsuite>",
+        "</testsuites>"
+    ].join("");
+
+    return result;
+}
+
+function showReportPage(finalMessage: string) {
+    const stack = new StackLayout();
+    const btn = new Button();
     btn.text = "Rerun tests";
     btn.on("tap", () => runAll(testsSelector));
     stack.addChild(btn);
-    let messageContainer = new TextView();
+
+    const messageContainer = new TextView();
     messageContainer.editable = messageContainer.autocorrect = false;
     messageContainer.text = finalMessage;
     stack.addChild(messageContainer);
+
     const page = topmost().currentPage;
     page.id = unsetValue;
     page.className = unsetValue;
@@ -351,10 +358,11 @@ function printRunTestStats() {
     if (page.android) {
         setTimeout(() => {
             messageContainer.dismissSoftInput();
-            (<android.view.View>messageContainer.nativeView).scrollTo(0, 0);
-        });
+            (<android.view.View>messageContainer.nativeViewProtected).scrollTo(0, 0);
+        }, 10);
     }
 }
+
 
 function startLog(): void {
     let testsName: string = this.name;
@@ -369,16 +377,16 @@ function log(): void {
 }
 
 let testsSelector: string
-export var runAll = function (testSelector?: string) {
+export function runAll(testSelector?: string) {
     testsSelector = testSelector;
     if (running) {
         // TODO: We may schedule pending run requests
         return;
     }
 
-    var singleModuleName, singleTestName;
+    let singleModuleName, singleTestName;
     if (testSelector) {
-        var pair = testSelector.split(".");
+        const pair = testSelector.split(".");
         singleModuleName = pair[0];
         if (singleModuleName) {
             if (singleModuleName.length === 0) {
@@ -400,17 +408,17 @@ export var runAll = function (testSelector?: string) {
 
     console.log("TESTS: " + singleModuleName ? singleModuleName : "" + " " + singleTestName ? singleTestName : "");
 
-    var totalSuccess = 0;
-    var totalFailed: Array<TKUnit.TestFailure> = [];
+    const totalSuccess = 0;
+    const totalFailed: Array<TKUnit.TestFailure> = [];
     testsQueue.push(new TestInfo(() => { running = true; startTime = TKUnit.time(); }));
-    for (var name in allTests) {
+    for (const name in allTests) {
         if (singleModuleName && (singleModuleName !== name.toLowerCase())) {
             continue;
         }
 
-        var testModule = allTests[name];
+        const testModule = allTests[name];
 
-        var test = testModule.createTestCase ? testModule.createTestCase() : testModule;
+        const test = testModule.createTestCase ? testModule.createTestCase() : testModule;
         test.name = name;
 
         testsQueue.push(new TestInfo(startLog, test));
@@ -419,17 +427,17 @@ export var runAll = function (testSelector?: string) {
             testsQueue.push(new TestInfo(test.setUpModule, test));
         }
 
-        for (var testName in test) {
+        for (const testName in test) {
             if (singleTestName && (singleTestName !== testName.toLowerCase())) {
                 continue;
             }
 
-            var testFunction = test[testName];
+            const testFunction = test[testName];
             if ((typeof (testFunction) === "function") && (testName.substring(0, 4) == "test")) {
                 if (test.setUp) {
                     testsQueue.push(new TestInfo(test.setUp, test));
                 }
-                var testTimeout = testsWithLongDelay[testName];
+                const testTimeout = testsWithLongDelay[testName] || testsSuitesWithLongDelay[name];
                 testsQueue.push(new TestInfo(testFunction, test, true, name + "." + testName, false, null, testTimeout));
                 if (test.tearDown) {
                     testsQueue.push(new TestInfo(test.tearDown, test));
@@ -447,8 +455,6 @@ export var runAll = function (testSelector?: string) {
 
     TKUnit.runTests(testsQueue, 0);
 }
-
-
 
 class TestInfo implements TKUnit.TestInfoEntry {
     testFunc: () => void;

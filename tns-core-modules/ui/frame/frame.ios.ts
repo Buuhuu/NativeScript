@@ -1,10 +1,11 @@
 ﻿// Definitions.
 import { iOSFrame as iOSFrameDefinition, BackstackEntry, NavigationTransition } from ".";
 import { Page } from "../page";
+import { profile } from "../../profiling";
 
 //Types.
 import { FrameBase, View, application, layout, traceEnabled, traceWrite, traceCategories, isCategorySet } from "./frame-common";
-import { _createIOSAnimatedTransitioning } from "../transition";
+import { _createIOSAnimatedTransitioning } from "./fragment.transitions";
 // HACK: Webpack. Use a fully-qualified import to allow resolve.extensions(.ios.js) to
 // kick in. `../utils` doesn't seem to trigger the webpack extensions mechanism.
 import * as uiUtils from "tns-core-modules/ui/utils";
@@ -19,8 +20,6 @@ const DELEGATE = "_delegate";
 
 let navDepth = -1;
 
-const FRAME_CONTEXT = {};
-
 export class Frame extends FrameBase {
     private _ios: iOSFrame;
     private _paramToNavigate: any;
@@ -34,17 +33,10 @@ export class Frame extends FrameBase {
     public _bottom: number;
     public _isInitialNavigation: boolean = true;
 
-    public get _context(): any {
-        return FRAME_CONTEXT;
-    }
-    public set _context(value: any) {
-        throw new Error("Frame _context is readonly");
-    }
-
     constructor() {
         super();
         this._ios = new iOSFrame(this);
-        this.nativeView = this._ios.controller.view;
+        this.nativeViewProtected = this._ios.controller.view;
 
         // When there is a 40px high "in-call" status bar, nobody moves the navigationBar top from 20 to 40 and it remains underneath the status bar.
         let frameRef = new WeakRef(this);
@@ -59,6 +51,7 @@ export class Frame extends FrameBase {
         });
     }
 
+    @profile
     public onLoaded() {
         super.onLoaded();
 
@@ -78,6 +71,7 @@ export class Frame extends FrameBase {
         }
     }
 
+    @profile
     public _navigateCore(backstackEntry: BackstackEntry) {
         super._navigateCore(backstackEntry);
 
@@ -252,10 +246,6 @@ export class Frame extends FrameBase {
         return this._ios;
     }
 
-    // get nativeView(): any {
-    //     return this._ios.controller.view;
-    // }
-
     public static get defaultAnimatedNavigation(): boolean {
         return FrameBase.defaultAnimatedNavigation;
     }
@@ -273,7 +263,7 @@ export class Frame extends FrameBase {
     public requestLayout(): void {
         super.requestLayout();
         // Invalidate our Window so that layout is triggered again.
-        let window = this.nativeView.window;
+        let window = this.nativeViewProtected.window;
         if (window) {
             window.setNeedsLayout();
         }
@@ -361,7 +351,7 @@ export class Frame extends FrameBase {
 
     public remeasureFrame(): void {
         this.requestLayout();
-        let window: UIWindow = this.nativeView.window;
+        let window: UIWindow = this.nativeViewProtected.window;
         if (window) {
             window.layoutIfNeeded();
         }
@@ -388,10 +378,10 @@ export class Frame extends FrameBase {
         this._ios.controller.navigationBar.autoresizingMask = UIViewAutoresizing.None;
         this._ios.controller.navigationBar.removeConstraints((<any>this)._ios.controller.navigationBar.constraints);
         this._ios.controller.navigationBar.frame = CGRectMake(
-            utils.layout.toDeviceIndependentPixels(this._ios.controller.navigationBar.frame.origin.x),
+            this._ios.controller.navigationBar.frame.origin.x,
             utils.layout.toDeviceIndependentPixels(statusBarHeight),
-            utils.layout.toDeviceIndependentPixels(this._ios.controller.navigationBar.frame.size.width),
-            utils.layout.toDeviceIndependentPixels(this._ios.controller.navigationBar.frame.size.height));
+            this._ios.controller.navigationBar.frame.size.width,
+            this._ios.controller.navigationBar.frame.size.height);
     }
 }
 
@@ -491,10 +481,11 @@ class UINavigationControllerImpl extends UINavigationController {
         return this._owner.get();
     }
 
-    public viewDidLoad(): void {
-        super.viewDidLoad();
+    @profile
+    public viewWillAppear(animated: boolean): void {
+        super.viewWillAppear(animated);
         let owner = this._owner.get();
-        if (owner) {
+        if (owner && (!owner.isLoaded && !owner.parent)) {
             owner.onLoaded();
         }
     }
